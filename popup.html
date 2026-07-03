@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Type Inspector</title>
+    <link rel="stylesheet" href="popup.css">
+  </head>
+  <body>
+    <main class="card">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">Type Inspector</p>
+          <h1>Inspect page typography locally.</h1>
+        </div>
+        <button id="inspect-button" type="button">Inspect text</button>
+      </header>
+
+      <p id="status" class="status" aria-live="polite">Click Inspect text, then click any text on the active page.</p>
+
+      <section class="result-card" aria-labelledby="result-title">
+        <div class="section-heading">
+          <h2 id="result-title">Latest capture</h2>
+          <button id="copy-button" type="button" disabled>Copy</button>
+        </div>
+
+        <div id="empty-state" class="empty-state">No typography captured yet.</div>
+
+        <dl id="result-list" class="result-list" hidden>
+          <div><dt>Rendered font</dt><dd data-field="renderedFontFamily"></dd></div>
+          <div><dt>Font stack</dt><dd data-field="fontFamily"></dd></div>
+          <div><dt>Size</dt><dd data-field="fontSize"></dd></div>
+          <div><dt>Weight</dt><dd data-field="fontWeight"></dd></div>
+          <div><dt>Line height</dt><dd data-field="lineHeight"></dd></div>
+          <div><dt>Letter spacing</dt><dd data-field="letterSpacing"></dd></div>
+          <div><dt>Style</dt><dd data-field="fontStyle"></dd></div>
+          <div><dt>Color</dt><dd data-field="color"></dd></div>
+          <div><dt>Background</dt><dd data-field="backgroundColor"></dd></div>
+          <div><dt>Element</dt><dd data-field="element"></dd></div>
+        </dl>
+      </section>
+
+      <section class="privacy-note" aria-labelledby="privacy-title">
+        <h2 id="privacy-title">Security posture</h2>
+        <p>Runs only on the active tab after you start it. Typography data stays in local extension storage.</p>
+      </section>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>
