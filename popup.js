@@ -2,23 +2,45 @@ const STORAGE_KEY = "latestCapture";
 const FIELD_NAMES = [
   "renderedFontFamily",
   "fontFamily",
+  "fontOrigin",
   "fontSize",
   "fontWeight",
+  "fontStyle",
   "lineHeight",
   "letterSpacing",
-  "fontStyle",
+  "wordSpacing",
+  "textTransform",
+  "textDecoration",
   "color",
   "backgroundColor",
+  "tagName",
   "element",
+  "styleSource",
 ];
+const SUMMARY_LIST_NAMES = [
+  "uniqueFontFamilies",
+  "commonSizes",
+  "commonWeights",
+  "headingPatterns",
+  "bodyPatterns",
+];
+const TOKEN_LIST_NAMES = ["fontSizes", "lineHeights", "letterSpacings", "colors"];
 
 const inspectButton = document.querySelector("#inspect-button");
 const copyButton = document.querySelector("#copy-button");
 const statusOutput = document.querySelector("#status");
 const emptyState = document.querySelector("#empty-state");
 const resultList = document.querySelector("#result-list");
+const summaryCard = document.querySelector("#summary-card");
+const summaryCount = document.querySelector("[data-summary-count]");
 const fieldOutputs = new Map(
   Array.from(document.querySelectorAll("[data-field]"), (element) => [element.dataset.field, element]),
+);
+const summaryLists = new Map(
+  Array.from(document.querySelectorAll("[data-summary-list]"), (element) => [element.dataset.summaryList, element]),
+);
+const tokenLists = new Map(
+  Array.from(document.querySelectorAll("[data-token-list]"), (element) => [element.dataset.tokenList, element]),
 );
 
 let latestCapture = null;
@@ -89,6 +111,7 @@ function renderCapture(capture) {
     latestCapture = null;
     emptyState.hidden = false;
     resultList.hidden = true;
+    summaryCard.hidden = true;
     copyButton.disabled = true;
     return;
   }
@@ -105,21 +128,96 @@ function renderCapture(capture) {
 
   emptyState.hidden = true;
   resultList.hidden = false;
+  renderPageSummary(capture.pageSummary);
   copyButton.disabled = false;
 }
 
+function renderPageSummary(summary) {
+  if (!isPageSummary(summary)) {
+    summaryCard.hidden = true;
+    return;
+  }
+
+  summaryCard.hidden = false;
+  summaryCount.textContent = summary.scannedVisibleTextElements || "0";
+
+  for (const listName of SUMMARY_LIST_NAMES) {
+    renderEntryList(summaryLists.get(listName), summary[listName]);
+  }
+
+  for (const tokenName of TOKEN_LIST_NAMES) {
+    renderTokenList(tokenLists.get(tokenName), summary.possibleDesignTokens[tokenName]);
+  }
+}
+
+function renderEntryList(list, entries) {
+  if (!list) {
+    return;
+  }
+
+  list.replaceChildren(...normalizeEntries(entries).map(createEntryItem));
+
+  if (!list.childElementCount) {
+    const item = document.createElement("li");
+    item.textContent = "No repeated pattern detected";
+    list.append(item);
+  }
+}
+
+function renderTokenList(output, entries) {
+  if (!output) {
+    return;
+  }
+
+  const values = normalizeEntries(entries).map((entry) => `${entry.value} (${entry.count})`);
+  output.textContent = values.length ? values.join(", ") : "No repeated values";
+}
+
+function createEntryItem(entry) {
+  const item = document.createElement("li");
+  item.textContent = `${entry.value} (${entry.count})`;
+
+  return item;
+}
+
 function formatCapture(capture) {
-  return [
+  const detailLines = [
     `Rendered font: ${capture.renderedFontFamily || "--"}`,
-    `Font stack: ${capture.fontFamily || "--"}`,
+    `Declared font-family: ${capture.fontFamily || "--"}`,
+    `Font origin: ${capture.fontOrigin || "--"}`,
     `Size: ${capture.fontSize || "--"}`,
     `Weight: ${capture.fontWeight || "--"}`,
+    `Style: ${capture.fontStyle || "--"}`,
     `Line height: ${capture.lineHeight || "--"}`,
     `Letter spacing: ${capture.letterSpacing || "--"}`,
-    `Style: ${capture.fontStyle || "--"}`,
+    `Word spacing: ${capture.wordSpacing || "--"}`,
+    `Text transform: ${capture.textTransform || "--"}`,
+    `Text decoration: ${capture.textDecoration || "--"}`,
     `Color: ${capture.color || "--"}`,
     `Background: ${capture.backgroundColor || "--"}`,
+    `Tag: ${capture.tagName || "--"}`,
     `Element: ${capture.element || "--"}`,
+    `Style source: ${capture.styleSource || "--"}`,
+  ];
+  const summary = capture.pageSummary;
+
+  if (!isPageSummary(summary)) {
+    return detailLines.join("\n");
+  }
+
+  return [
+    ...detailLines,
+    "",
+    `Visible elements scanned: ${summary.scannedVisibleTextElements}`,
+    `Font families: ${formatEntries(summary.uniqueFontFamilies)}`,
+    `Common sizes: ${formatEntries(summary.commonSizes)}`,
+    `Common weights: ${formatEntries(summary.commonWeights)}`,
+    `Heading patterns: ${formatEntries(summary.headingPatterns)}`,
+    `Body patterns: ${formatEntries(summary.bodyPatterns)}`,
+    `Possible size tokens: ${formatEntries(summary.possibleDesignTokens.fontSizes)}`,
+    `Possible line-height tokens: ${formatEntries(summary.possibleDesignTokens.lineHeights)}`,
+    `Possible letter-spacing tokens: ${formatEntries(summary.possibleDesignTokens.letterSpacings)}`,
+    `Possible color tokens: ${formatEntries(summary.possibleDesignTokens.colors)}`,
   ].join("\n");
 }
 
@@ -134,5 +232,33 @@ function isInspectableUrl(url) {
 function isCapture(value) {
   return value !== null
     && typeof value === "object"
-    && FIELD_NAMES.every((fieldName) => typeof value[fieldName] === "string");
+    && FIELD_NAMES.every((fieldName) => typeof value[fieldName] === "string")
+    && isPageSummary(value.pageSummary);
+}
+
+function isPageSummary(value) {
+  return value !== null
+    && typeof value === "object"
+    && typeof value.scannedVisibleTextElements === "string"
+    && SUMMARY_LIST_NAMES.every((fieldName) => Array.isArray(value[fieldName]))
+    && value.possibleDesignTokens !== null
+    && typeof value.possibleDesignTokens === "object"
+    && TOKEN_LIST_NAMES.every((fieldName) => Array.isArray(value.possibleDesignTokens[fieldName]));
+}
+
+function normalizeEntries(entries) {
+  return Array.isArray(entries)
+    ? entries.filter((entry) => (
+      entry !== null
+      && typeof entry === "object"
+      && typeof entry.value === "string"
+      && Number.isInteger(entry.count)
+    ))
+    : [];
+}
+
+function formatEntries(entries) {
+  const values = normalizeEntries(entries).map((entry) => `${entry.value} (${entry.count})`);
+
+  return values.length ? values.join(", ") : "none";
 }

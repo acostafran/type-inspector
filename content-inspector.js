@@ -7,6 +7,31 @@
 
   const OVERLAY_ID = "type-inspector-overlay";
   const STYLE_ID = "type-inspector-style";
+  const MAX_SUMMARY_ELEMENTS = 350;
+  const COMMON_SYSTEM_FONTS = new Set([
+    "-apple-system",
+    "blinkmacsystemfont",
+    "system-ui",
+    "ui-sans-serif",
+    "ui-serif",
+    "ui-monospace",
+    "arial",
+    "avenir",
+    "calibri",
+    "cambria",
+    "courier new",
+    "georgia",
+    "helvetica",
+    "helvetica neue",
+    "menlo",
+    "monaco",
+    "roboto",
+    "segoe ui",
+    "sf pro display",
+    "sf pro text",
+    "times new roman",
+    "verdana",
+  ]);
   let overlay = null;
   let active = false;
   let highlightedElement = null;
@@ -97,30 +122,108 @@
 
   function captureTypography(element) {
     const styles = window.getComputedStyle(element);
+    const families = splitFontFamilies(styles.fontFamily);
+    const renderedFontFamily = getRenderedFontFamily(element, families) || "Unknown";
 
     return {
-      renderedFontFamily: getRenderedFontFamily(element) || "Unknown",
+      renderedFontFamily,
       fontFamily: styles.fontFamily,
       fontSize: styles.fontSize,
       fontWeight: styles.fontWeight,
+      fontStyle: styles.fontStyle,
       lineHeight: styles.lineHeight,
       letterSpacing: styles.letterSpacing,
-      fontStyle: styles.fontStyle,
+      wordSpacing: styles.wordSpacing,
+      textTransform: styles.textTransform,
+      textDecoration: styles.textDecorationLine,
       color: styles.color,
       backgroundColor: getVisibleBackgroundColor(element),
+      tagName: element.tagName.toLowerCase(),
       element: describeElement(element),
+      styleSource: getStyleSource(element),
+      fontOrigin: getFontOrigin(renderedFontFamily, families),
+      pageSummary: capturePageSummary(),
       capturedAt: new Date().toISOString(),
     };
   }
 
-  function getRenderedFontFamily(element) {
+  function capturePageSummary() {
+    const summaryElements = getVisibleTextElements().slice(0, MAX_SUMMARY_ELEMENTS);
+    const families = new Map();
+    const sizes = new Map();
+    const weights = new Map();
+    const headingStyles = new Map();
+    const bodyStyles = new Map();
+    const tokenValues = {
+      fontSizes: new Map(),
+      lineHeights: new Map(),
+      letterSpacings: new Map(),
+      colors: new Map(),
+    };
+
+    for (const element of summaryElements) {
+      const styles = window.getComputedStyle(element);
+      const familyList = splitFontFamilies(styles.fontFamily);
+      const primaryFamily = familyList[0] ?? styles.fontFamily;
+      const pattern = `${styles.fontFamily} / ${styles.fontSize} / ${styles.fontWeight} / ${styles.lineHeight}`;
+
+      increment(families, primaryFamily || "Unknown");
+      increment(sizes, styles.fontSize);
+      increment(weights, styles.fontWeight);
+      increment(isHeadingElement(element) ? headingStyles : bodyStyles, pattern);
+      increment(tokenValues.fontSizes, styles.fontSize);
+      increment(tokenValues.lineHeights, styles.lineHeight);
+      increment(tokenValues.letterSpacings, styles.letterSpacing);
+      increment(tokenValues.colors, styles.color);
+    }
+
+    return {
+      scannedVisibleTextElements: String(summaryElements.length),
+      uniqueFontFamilies: topEntries(families, 12),
+      commonSizes: topEntries(sizes, 10),
+      commonWeights: topEntries(weights, 10),
+      headingPatterns: topEntries(headingStyles, 6),
+      bodyPatterns: topEntries(bodyStyles, 6),
+      possibleDesignTokens: {
+        fontSizes: repeatedEntries(tokenValues.fontSizes, 12),
+        lineHeights: repeatedEntries(tokenValues.lineHeights, 10),
+        letterSpacings: repeatedEntries(tokenValues.letterSpacings, 8),
+        colors: repeatedEntries(tokenValues.colors, 12),
+      },
+    };
+  }
+
+  function getVisibleTextElements() {
+    const selector = "p, span, a, button, label, li, h1, h2, h3, h4, h5, h6, blockquote, figcaption, th, td, dt, dd, code, pre";
+
+    return Array.from(document.querySelectorAll(selector)).filter((element) => {
+      const text = element.textContent?.trim();
+
+      if (!text) {
+        return false;
+      }
+
+      const rect = element.getBoundingClientRect();
+      const styles = window.getComputedStyle(element);
+
+      return rect.width > 0
+        && rect.height > 0
+        && rect.bottom >= 0
+        && rect.right >= 0
+        && rect.top <= window.innerHeight
+        && rect.left <= window.innerWidth
+        && styles.visibility !== "hidden"
+        && styles.display !== "none";
+    });
+  }
+
+  function getRenderedFontFamily(element, families = splitFontFamilies(window.getComputedStyle(element).fontFamily)) {
     if (!document.fonts?.check) {
-      return "";
+      return families[0] ?? "";
     }
 
     const styles = window.getComputedStyle(element);
     const fontSize = styles.fontSize || "16px";
-    const families = splitFontFamilies(styles.fontFamily);
 
     return families.find((family) => document.fonts.check(`${fontSize} ${quoteFontFamily(family)}`)) ?? families[0] ?? "";
   }
@@ -152,6 +255,110 @@
     return window.getComputedStyle(document.documentElement).backgroundColor || "transparent";
   }
 
+  function getStyleSource(element) {
+    const matches = [];
+    const inlineStyle = element.getAttribute("style");
+
+    if (inlineStyle) {
+      matches.push("inline style");
+    }
+
+    for (const sheet of Array.from(document.styleSheets)) {
+      let rules;
+
+      try {
+        rules = sheet.cssRules;
+      } catch {
+        continue;
+      }
+
+      for (const rule of Array.from(rules)) {
+        if (!(rule instanceof CSSStyleRule) || !hasTypographyDeclaration(rule.style)) {
+          continue;
+        }
+
+        try {
+          if (element.matches(rule.selectorText)) {
+            matches.push(rule.selectorText);
+          }
+        } catch {
+          continue;
+        }
+      }
+    }
+
+    return matches.slice(-5).join(" | ") || "computed/inherited styles";
+  }
+
+  function hasTypographyDeclaration(style) {
+    return [
+      "font-family",
+      "font-size",
+      "font-weight",
+      "font-style",
+      "line-height",
+      "letter-spacing",
+      "word-spacing",
+      "text-transform",
+      "text-decoration",
+      "color",
+    ].some((property) => style.getPropertyValue(property));
+  }
+
+  function getFontOrigin(renderedFontFamily, families) {
+    const normalizedRendered = renderedFontFamily.toLowerCase();
+
+    if (!renderedFontFamily || renderedFontFamily === "Unknown") {
+      return "unknown";
+    }
+
+    if (COMMON_SYSTEM_FONTS.has(normalizedRendered)) {
+      return "system font";
+    }
+
+    if (isDeclaredFontFace(renderedFontFamily)) {
+      return "web font";
+    }
+
+    const firstFamily = families[0]?.toLowerCase();
+
+    if (firstFamily && firstFamily !== normalizedRendered) {
+      return "fallback candidate";
+    }
+
+    return "local or browser font";
+  }
+
+  function isDeclaredFontFace(fontFamily) {
+    if (typeof CSSFontFaceRule === "undefined") {
+      return false;
+    }
+
+    const target = fontFamily.toLowerCase();
+
+    for (const sheet of Array.from(document.styleSheets)) {
+      let rules;
+
+      try {
+        rules = sheet.cssRules;
+      } catch {
+        continue;
+      }
+
+      for (const rule of Array.from(rules)) {
+        if (rule instanceof CSSFontFaceRule) {
+          const declaredFamily = rule.style.getPropertyValue("font-family").replace(/^['\"]|['\"]$/g, "").toLowerCase();
+
+          if (declaredFamily === target) {
+            return true;
+          }
+        }
+      }
+    }
+
+    return false;
+  }
+
   function describeElement(element) {
     const tag = element.tagName.toLowerCase();
     const id = element.id ? `#${safeIdentifier(element.id)}` : "";
@@ -162,6 +369,25 @@
 
   function safeIdentifier(value) {
     return value.replace(/[^a-z0-9_-]/gi, "_");
+  }
+
+  function isHeadingElement(element) {
+    return /^h[1-6]$/i.test(element.tagName);
+  }
+
+  function increment(map, value) {
+    const key = value || "normal";
+    map.set(key, (map.get(key) ?? 0) + 1);
+  }
+
+  function topEntries(map, limit) {
+    return Array.from(map, ([value, count]) => ({ value, count }))
+      .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value))
+      .slice(0, limit);
+  }
+
+  function repeatedEntries(map, limit) {
+    return topEntries(map, limit).filter((entry) => entry.count > 1);
   }
 
   function updateOverlay(element) {

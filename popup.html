@@ -28,16 +28,60 @@
 
         <dl id="result-list" class="result-list" hidden>
           <div><dt>Rendered font</dt><dd data-field="renderedFontFamily"></dd></div>
-          <div><dt>Font stack</dt><dd data-field="fontFamily"></dd></div>
+          <div><dt>Declared stack</dt><dd data-field="fontFamily"></dd></div>
+          <div><dt>Font origin</dt><dd data-field="fontOrigin"></dd></div>
           <div><dt>Size</dt><dd data-field="fontSize"></dd></div>
           <div><dt>Weight</dt><dd data-field="fontWeight"></dd></div>
+          <div><dt>Style</dt><dd data-field="fontStyle"></dd></div>
           <div><dt>Line height</dt><dd data-field="lineHeight"></dd></div>
           <div><dt>Letter spacing</dt><dd data-field="letterSpacing"></dd></div>
-          <div><dt>Style</dt><dd data-field="fontStyle"></dd></div>
+          <div><dt>Word spacing</dt><dd data-field="wordSpacing"></dd></div>
+          <div><dt>Transform</dt><dd data-field="textTransform"></dd></div>
+          <div><dt>Decoration</dt><dd data-field="textDecoration"></dd></div>
           <div><dt>Color</dt><dd data-field="color"></dd></div>
           <div><dt>Background</dt><dd data-field="backgroundColor"></dd></div>
+          <div><dt>Tag</dt><dd data-field="tagName"></dd></div>
           <div><dt>Element</dt><dd data-field="element"></dd></div>
+          <div><dt>Style source</dt><dd data-field="styleSource"></dd></div>
         </dl>
+      </section>
+
+      <section id="summary-card" class="result-card" aria-labelledby="summary-title" hidden>
+        <h2 id="summary-title">Visible page summary</h2>
+        <p class="summary-count"><span data-summary-count>0</span> visible text elements scanned.</p>
+
+        <div class="summary-grid">
+          <section aria-labelledby="families-title">
+            <h3 id="families-title">Font families</h3>
+            <ol data-summary-list="uniqueFontFamilies"></ol>
+          </section>
+          <section aria-labelledby="sizes-title">
+            <h3 id="sizes-title">Common sizes</h3>
+            <ol data-summary-list="commonSizes"></ol>
+          </section>
+          <section aria-labelledby="weights-title">
+            <h3 id="weights-title">Common weights</h3>
+            <ol data-summary-list="commonWeights"></ol>
+          </section>
+          <section aria-labelledby="heading-title">
+            <h3 id="heading-title">Heading patterns</h3>
+            <ol data-summary-list="headingPatterns"></ol>
+          </section>
+          <section aria-labelledby="body-title">
+            <h3 id="body-title">Body patterns</h3>
+            <ol data-summary-list="bodyPatterns"></ol>
+          </section>
+        </div>
+
+        <section aria-labelledby="tokens-title">
+          <h3 id="tokens-title">Possible design tokens</h3>
+          <dl class="token-list">
+            <div><dt>Font sizes</dt><dd data-token-list="fontSizes"></dd></div>
+            <div><dt>Line heights</dt><dd data-token-list="lineHeights"></dd></div>
+            <div><dt>Letter spacing</dt><dd data-token-list="letterSpacings"></dd></div>
+            <div><dt>Colors</dt><dd data-token-list="colors"></dd></div>
+          </dl>
+        </section>
       </section>
 
       <section class="privacy-note" aria-labelledby="privacy-title">

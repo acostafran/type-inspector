@@ -51,10 +51,12 @@ button:focus-visible {
 .status,
 .privacy-note p,
 dl,
+ol,
 dt,
 dd,
 h1,
-h2 {
+h2,
+h3 {
   margin: 0;
 }
 
@@ -74,6 +76,13 @@ h1 {
 
 h2 {
   font-size: 14px;
+}
+
+h3 {
+  color: #cbd5e1;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .status,
@@ -108,7 +117,8 @@ h2 {
   gap: 7px;
 }
 
-.result-list div {
+.result-list div,
+.token-list div {
   display: grid;
   grid-template-columns: 112px minmax(0, 1fr);
   gap: 10px;
@@ -126,4 +136,39 @@ dd {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 12px;
   overflow-wrap: anywhere;
+}
+
+.summary-count {
+  margin: 0;
+  color: #cbd5e1;
+  font-size: 12px;
+}
+
+.summary-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.summary-grid section {
+  display: grid;
+  gap: 6px;
+}
+
+ol {
+  display: grid;
+  gap: 4px;
+  padding-left: 18px;
+  color: #f8fafc;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+}
+
+li {
+  overflow-wrap: anywhere;
+}
+
+.token-list {
+  display: grid;
+  gap: 7px;
+  margin-top: 8px;
 }

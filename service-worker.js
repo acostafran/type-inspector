@@ -24,5 +24,6 @@ function isCapturePayload(payload) {
   return isRecord(payload)
     && typeof payload.fontFamily === "string"
     && typeof payload.fontSize === "string"
-    && typeof payload.element === "string";
+    && typeof payload.element === "string"
+    && isRecord(payload.pageSummary);
 }
