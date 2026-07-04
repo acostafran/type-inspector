@@ -60,8 +60,10 @@
   let overlayHost = null;
   let overlay = null;
   let overlayLabel = null;
+  let overlayHint = null;
   let overlayUnavailable = null;
   let active = false;
+  let frozen = false;
   let highlightedElement = null;
 
   chrome.runtime.onMessage.addListener((message) => {
@@ -79,7 +81,9 @@
     }
 
     active = true;
+    frozen = false;
     ensureOverlay();
+    updateModeHint();
     document.addEventListener("mousemove", handleMouseMove, EVENT_OPTIONS);
     document.addEventListener("pointermove", handleMouseMove, EVENT_OPTIONS);
     document.addEventListener("keydown", handleKeyDown, EVENT_OPTIONS);
@@ -95,6 +99,7 @@
     }
 
     active = false;
+    frozen = false;
     highlightedElement = null;
     document.removeEventListener("mousemove", handleMouseMove, EVENT_OPTIONS);
     document.removeEventListener("pointermove", handleMouseMove, EVENT_OPTIONS);
@@ -108,11 +113,16 @@
     overlayHost = null;
     overlay = null;
     overlayLabel = null;
+    overlayHint = null;
     overlayUnavailable = null;
     chrome.runtime.sendMessage({ type: "type-inspector:ended" });
   }
 
   function handleMouseMove(event) {
+    if (frozen) {
+      return;
+    }
+
     const candidate = getInspectableElement(event);
 
     if (!candidate) {
@@ -165,7 +175,23 @@
     if (event.key === "Escape") {
       event.preventDefault();
       stopInspection();
+      return;
     }
+
+    if (event.key.toLowerCase() === "f") {
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      setFrozen(!frozen);
+    }
+  }
+
+  function setFrozen(nextFrozen) {
+    frozen = nextFrozen;
+    highlightedElement = null;
+
+    hideOverlay();
+    updateModeHint();
   }
 
   function getInspectableElement(event) {
@@ -849,6 +875,15 @@
     overlayLabel.textContent = `${styles.fontFamily} / ${styles.fontSize} / ${styles.fontWeight}`;
   }
 
+  function updateModeHint() {
+    ensureOverlay();
+
+    overlayHint.textContent = frozen
+      ? "Type Inspector: menu freeze on. Move into the open submenu and click text. F unfreezes. Esc cancels."
+      : "Type Inspector: hover works normally. Open a submenu, press F to freeze it, then click text. Esc cancels.";
+    overlayHint.dataset.mode = frozen ? "frozen" : "active";
+  }
+
   function updateUnavailableOverlay(event, message) {
     ensureOverlay();
 
@@ -865,7 +900,7 @@
   }
 
   function ensureOverlay() {
-    if (overlayHost && overlay && overlayLabel && overlayUnavailable) {
+    if (overlayHost && overlay && overlayLabel && overlayHint && overlayUnavailable) {
       return;
     }
 
@@ -879,6 +914,8 @@
     overlay.id = OVERLAY_ID;
     overlayLabel = document.createElement("div");
     overlayLabel.className = "label";
+    overlayHint = document.createElement("div");
+    overlayHint.className = "hint";
     overlayUnavailable = document.createElement("div");
     overlayUnavailable.className = "unavailable";
     overlayUnavailable.hidden = true;
@@ -890,8 +927,33 @@
         inset: 0;
         z-index: 2147483647;
         display: block;
-        pointer-events: auto;
+        pointer-events: none;
         cursor: crosshair;
+      }
+
+      .hint {
+        all: initial;
+        position: fixed;
+        top: 12px;
+        left: 50%;
+        z-index: 2147483647;
+        box-sizing: border-box;
+        max-width: min(720px, calc(100vw - 24px));
+        transform: translateX(-50%);
+        border: 1px solid rgb(167 243 208 / 0.55);
+        border-radius: 999px;
+        padding: 8px 12px;
+        background: #111827;
+        box-shadow: 0 10px 24px rgb(0 0 0 / 0.24);
+        color: #e5e7eb;
+        display: block;
+        font: 700 12px/1.25 system-ui, sans-serif;
+        pointer-events: none;
+      }
+
+      .hint[data-mode="frozen"] {
+        border-color: rgb(251 191 36 / 0.7);
+        color: #fde68a;
       }
 
       #${OVERLAY_ID} {
@@ -941,7 +1003,7 @@
     `;
 
     overlay.append(overlayLabel);
-    shadowRoot.append(style, overlay, overlayUnavailable);
+    shadowRoot.append(style, overlay, overlayHint, overlayUnavailable);
     document.documentElement.append(overlayHost);
   }
 
