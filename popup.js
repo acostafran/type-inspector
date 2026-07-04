@@ -19,6 +19,7 @@ const FIELD_NAMES = [
   "tagName",
   "element",
 ];
+const CAPTURE_FIELD_NAMES = FIELD_NAMES.filter((fieldName) => fieldName !== "contrastRatio");
 const DECLARED_RULE_NAMES = ["declaredFontSizeRule", "declaredLineHeightRule"];
 const CSS_PROPERTY_BY_FIELD = {
   renderedFontFamily: "font-family",
@@ -423,7 +424,7 @@ function isInspectableUrl(url) {
 function isCapture(value) {
   return value !== null
     && typeof value === "object"
-    && FIELD_NAMES.every((fieldName) => typeof value[fieldName] === "string")
+    && CAPTURE_FIELD_NAMES.every((fieldName) => typeof value[fieldName] === "string")
     && DECLARED_RULE_NAMES.every((fieldName) => typeof value[fieldName] === "string")
     && isPageSummary(value.pageSummary);
 }
