@@ -7,6 +7,7 @@
 
   const OVERLAY_ID = "type-inspector-overlay";
   const STYLE_ID = "type-inspector-style";
+  const TEXT_ELEMENT_SELECTOR = "strong, em, b, i, mark, small, sub, sup, cite, q, abbr, time, code, samp, kbd, var, span, a, button, label, li, h1, h2, h3, h4, h5, h6, p, blockquote, figcaption, th, td, dt, dd, pre";
   const MAX_SUMMARY_ELEMENTS = 350;
   const COMMON_SYSTEM_FONTS = new Set([
     "-apple-system",
@@ -74,7 +75,7 @@
   }
 
   function handleMouseMove(event) {
-    const candidate = getInspectableElement(event.target);
+    const candidate = getInspectableElement(event);
 
     if (!candidate || candidate === highlightedElement) {
       return;
@@ -85,7 +86,7 @@
   }
 
   function handleClick(event) {
-    const candidate = getInspectableElement(event.target);
+    const candidate = getInspectableElement(event);
 
     if (!candidate) {
       return;
@@ -109,15 +110,36 @@
     }
   }
 
-  function getInspectableElement(target) {
+  function getInspectableElement(event) {
+    const target = getTargetFromPoint(event) ?? getComposedPathElement(event);
+
     if (!(target instanceof Element) || target.id === OVERLAY_ID || target.closest(`#${OVERLAY_ID}`)) {
       return null;
     }
 
-    const element = target.closest("p, span, a, button, label, li, h1, h2, h3, h4, h5, h6, blockquote, figcaption, th, td, dt, dd, code, pre") ?? target;
+    const element = getDeepestTextElement(target) ?? target.closest(TEXT_ELEMENT_SELECTOR) ?? target;
     const text = element.textContent?.trim();
 
     return text ? element : null;
+  }
+
+  function getTargetFromPoint(event) {
+    if (!Number.isFinite(event.clientX) || !Number.isFinite(event.clientY)) {
+      return null;
+    }
+
+    return document.elementFromPoint(event.clientX, event.clientY);
+  }
+
+  function getComposedPathElement(event) {
+    return event.composedPath?.().find((entry) => entry instanceof Element) ?? null;
+  }
+
+  function getDeepestTextElement(root) {
+    const matches = Array.from(root.querySelectorAll?.(TEXT_ELEMENT_SELECTOR) ?? [])
+      .filter((element) => element.textContent?.trim() && isVisibleElement(element));
+
+    return matches.at(-1) ?? (root.matches?.(TEXT_ELEMENT_SELECTOR) ? root : null);
   }
 
   function captureTypography(element) {
@@ -194,27 +216,29 @@
   }
 
   function getVisibleTextElements() {
-    const selector = "p, span, a, button, label, li, h1, h2, h3, h4, h5, h6, blockquote, figcaption, th, td, dt, dd, code, pre";
-
-    return Array.from(document.querySelectorAll(selector)).filter((element) => {
+    return Array.from(document.querySelectorAll(TEXT_ELEMENT_SELECTOR)).filter((element) => {
       const text = element.textContent?.trim();
 
       if (!text) {
         return false;
       }
 
-      const rect = element.getBoundingClientRect();
-      const styles = window.getComputedStyle(element);
-
-      return rect.width > 0
-        && rect.height > 0
-        && rect.bottom >= 0
-        && rect.right >= 0
-        && rect.top <= window.innerHeight
-        && rect.left <= window.innerWidth
-        && styles.visibility !== "hidden"
-        && styles.display !== "none";
+      return isVisibleElement(element);
     });
+  }
+
+  function isVisibleElement(element) {
+    const rect = element.getBoundingClientRect();
+    const styles = window.getComputedStyle(element);
+
+    return rect.width > 0
+      && rect.height > 0
+      && rect.bottom >= 0
+      && rect.right >= 0
+      && rect.top <= window.innerHeight
+      && rect.left <= window.innerWidth
+      && styles.visibility !== "hidden"
+      && styles.display !== "none";
   }
 
   function getRenderedFontFamily(element, families = splitFontFamilies(window.getComputedStyle(element).fontFamily)) {
@@ -395,9 +419,9 @@
     const rect = element.getBoundingClientRect();
     const styles = window.getComputedStyle(element);
 
-    overlay.style.transform = `translate(${Math.max(rect.left, 0)}px, ${Math.max(rect.top, 0)}px)`;
-    overlay.style.width = `${Math.max(rect.width, 1)}px`;
-    overlay.style.height = `${Math.max(rect.height, 1)}px`;
+    overlay.style.setProperty("transform", `translate(${Math.max(rect.left, 0)}px, ${Math.max(rect.top, 0)}px)`, "important");
+    overlay.style.setProperty("width", `${Math.max(rect.width, 1)}px`, "important");
+    overlay.style.setProperty("height", `${Math.max(rect.height, 1)}px`, "important");
     overlay.dataset.label = `${styles.fontFamily} / ${styles.fontSize} / ${styles.fontWeight}`;
   }
 
@@ -421,29 +445,37 @@
     style.id = STYLE_ID;
     style.textContent = `
       #${OVERLAY_ID} {
-        position: fixed;
-        z-index: 2147483647;
-        box-sizing: border-box;
-        border: 2px solid #10b981;
-        border-radius: 6px;
-        background: rgb(16 185 129 / 0.08);
-        box-shadow: 0 0 0 99999px rgb(2 6 23 / 0.08);
-        color: #052e1a;
-        font: 700 11px/1.2 system-ui, sans-serif;
-        pointer-events: none;
-        transition: transform 80ms ease, width 80ms ease, height 80ms ease;
+        all: initial !important;
+        position: fixed !important;
+        z-index: 2147483647 !important;
+        box-sizing: border-box !important;
+        display: block !important;
+        border: 2px solid #10b981 !important;
+        border-radius: 6px !important;
+        background: rgb(16 185 129 / 0.08) !important;
+        box-shadow: 0 0 0 99999px rgb(2 6 23 / 0.08) !important;
+        color: #052e1a !important;
+        font: 700 11px/1.2 system-ui, sans-serif !important;
+        pointer-events: none !important;
+        transition: transform 80ms ease, width 80ms ease, height 80ms ease !important;
       }
 
       #${OVERLAY_ID}::before {
-        position: absolute;
-        left: -2px;
-        bottom: calc(100% + 4px);
-        max-width: min(360px, 90vw);
-        border-radius: 999px;
-        padding: 6px 9px;
-        background: #a7f3d0;
-        color: #052e1a;
-        content: attr(data-label);
+        all: initial !important;
+        position: absolute !important;
+        left: -2px !important;
+        bottom: calc(100% + 4px) !important;
+        max-width: min(360px, 90vw) !important;
+        border-radius: 999px !important;
+        padding: 6px 9px !important;
+        background: #a7f3d0 !important;
+        color: #052e1a !important;
+        content: attr(data-label) !important;
+        display: block !important;
+        font: 700 11px/1.2 system-ui, sans-serif !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+        white-space: nowrap !important;
       }
     `;
     document.documentElement.append(style);

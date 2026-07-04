@@ -53,6 +53,12 @@ copyButton.addEventListener("click", () => {
   void copyLatestCapture();
 });
 
+for (const [fieldName, button] of fieldOutputs) {
+  button.addEventListener("click", () => {
+    void copyField(fieldName);
+  });
+}
+
 chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName !== "local" || !changes[STORAGE_KEY]) {
     return;
@@ -106,12 +112,31 @@ async function copyLatestCapture() {
   }
 }
 
+async function copyField(fieldName) {
+  if (!latestCapture || typeof latestCapture[fieldName] !== "string") {
+    return;
+  }
+
+  try {
+    await navigator.clipboard.writeText(latestCapture[fieldName]);
+    setStatus(`${getFieldLabel(fieldName)} copied.`);
+  } catch (error) {
+    console.warn("Could not copy typography field.", error);
+    setStatus("Could not copy that field.");
+  }
+}
+
 function renderCapture(capture) {
   if (!isCapture(capture)) {
     latestCapture = null;
     emptyState.hidden = false;
     resultList.hidden = true;
     summaryCard.hidden = true;
+    for (const button of fieldOutputs.values()) {
+      button.textContent = "--";
+      button.disabled = true;
+      button.removeAttribute("title");
+    }
     copyButton.disabled = true;
     return;
   }
@@ -122,7 +147,10 @@ function renderCapture(capture) {
     const output = fieldOutputs.get(fieldName);
 
     if (output) {
-      output.textContent = capture[fieldName] || "--";
+      const value = capture[fieldName] || "--";
+      output.textContent = value;
+      output.title = `Copy ${getFieldLabel(fieldName)}: ${value}`;
+      output.disabled = !capture[fieldName];
     }
   }
 
@@ -223,6 +251,12 @@ function formatCapture(capture) {
 
 function setStatus(message) {
   statusOutput.textContent = message;
+}
+
+function getFieldLabel(fieldName) {
+  return fieldName
+    .replace(/([A-Z])/g, " $1")
+    .replace(/^./, (character) => character.toUpperCase());
 }
 
 function isInspectableUrl(url) {

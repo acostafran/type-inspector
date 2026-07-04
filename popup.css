@@ -30,6 +30,28 @@ button:focus-visible {
   outline-offset: 2px;
 }
 
+.field-copy {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  border: 1px solid rgb(255 255 255 / 0.1);
+  border-radius: 9px;
+  padding: 5px 7px;
+  background: rgb(255 255 255 / 0.045);
+  color: #f8fafc;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+
+.field-copy:hover:not(:disabled) {
+  border-color: rgb(167 243 208 / 0.6);
+  background: rgb(167 243 208 / 0.08);
+}
+
 .card {
   display: grid;
   gap: 12px;
@@ -133,8 +155,6 @@ dt {
 dd {
   min-width: 0;
   color: #f8fafc;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 12px;
   overflow-wrap: anywhere;
 }
 
