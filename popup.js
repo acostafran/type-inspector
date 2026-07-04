@@ -87,6 +87,7 @@ async function startInspection() {
     await chrome.action.setBadgeText({ tabId: tab.id, text: "ON" });
     await chrome.action.setBadgeBackgroundColor({ tabId: tab.id, color: "#059669" });
     setStatus("Inspection is active. Click text on the page, or press Escape to cancel.");
+    window.close();
   } catch (error) {
     console.warn("Could not start Type Inspector.", error);
     setStatus("Could not start inspection on this page.");

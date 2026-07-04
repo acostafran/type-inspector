@@ -6,7 +6,7 @@
   window.__typeInspectorLoaded = true;
 
   const OVERLAY_ID = "type-inspector-overlay";
-  const STYLE_ID = "type-inspector-style";
+  const OVERLAY_HOST_ID = "type-inspector-overlay-host";
   const TEXT_ELEMENT_SELECTOR = "strong, em, b, i, mark, small, sub, sup, cite, q, abbr, time, code, samp, kbd, var, span, a, button, label, li, h1, h2, h3, h4, h5, h6, p, blockquote, figcaption, th, td, dt, dd, pre";
   const MAX_SUMMARY_ELEMENTS = 350;
   const COMMON_SYSTEM_FONTS = new Set([
@@ -33,7 +33,21 @@
     "times new roman",
     "verdana",
   ]);
+  const EVENT_OPTIONS = { capture: true, passive: false };
+  const BLOCKED_EVENTS = [
+    "click",
+    "dblclick",
+    "auxclick",
+    "mousedown",
+    "mouseup",
+    "pointerdown",
+    "pointerup",
+    "touchstart",
+    "touchend",
+  ];
+  let overlayHost = null;
   let overlay = null;
+  let overlayLabel = null;
   let active = false;
   let highlightedElement = null;
 
@@ -52,11 +66,14 @@
     }
 
     active = true;
-    ensureStyle();
     ensureOverlay();
-    document.addEventListener("mousemove", handleMouseMove, true);
-    document.addEventListener("click", handleClick, true);
-    document.addEventListener("keydown", handleKeyDown, true);
+    document.addEventListener("mousemove", handleMouseMove, EVENT_OPTIONS);
+    document.addEventListener("pointermove", handleMouseMove, EVENT_OPTIONS);
+    document.addEventListener("keydown", handleKeyDown, EVENT_OPTIONS);
+
+    for (const eventName of BLOCKED_EVENTS) {
+      document.addEventListener(eventName, handleBlockedPointerEvent, EVENT_OPTIONS);
+    }
   }
 
   function stopInspection() {
@@ -66,11 +83,18 @@
 
     active = false;
     highlightedElement = null;
-    document.removeEventListener("mousemove", handleMouseMove, true);
-    document.removeEventListener("click", handleClick, true);
-    document.removeEventListener("keydown", handleKeyDown, true);
-    overlay?.remove();
+    document.removeEventListener("mousemove", handleMouseMove, EVENT_OPTIONS);
+    document.removeEventListener("pointermove", handleMouseMove, EVENT_OPTIONS);
+    document.removeEventListener("keydown", handleKeyDown, EVENT_OPTIONS);
+
+    for (const eventName of BLOCKED_EVENTS) {
+      document.removeEventListener(eventName, handleBlockedPointerEvent, EVENT_OPTIONS);
+    }
+
+    overlayHost?.remove();
+    overlayHost = null;
     overlay = null;
+    overlayLabel = null;
     chrome.runtime.sendMessage({ type: "type-inspector:ended" });
   }
 
@@ -85,22 +109,32 @@
     updateOverlay(candidate);
   }
 
-  function handleClick(event) {
+  function handleBlockedPointerEvent(event) {
+    blockPageEvent(event);
+
+    if (event.type !== "click") {
+      return;
+    }
+
     const candidate = getInspectableElement(event);
 
-    if (!candidate) {
+    if (candidate) {
+      chrome.runtime.sendMessage({
+        type: "type-inspector:capture",
+        payload: captureTypography(candidate),
+      });
+      stopInspection();
+    }
+  }
+
+  function blockPageEvent(event) {
+    if (!active) {
       return;
     }
 
     event.preventDefault();
     event.stopPropagation();
     event.stopImmediatePropagation();
-
-    chrome.runtime.sendMessage({
-      type: "type-inspector:capture",
-      payload: captureTypography(candidate),
-    });
-    stopInspection();
   }
 
   function handleKeyDown(event) {
@@ -113,7 +147,7 @@
   function getInspectableElement(event) {
     const target = getTargetFromPoint(event) ?? getComposedPathElement(event);
 
-    if (!(target instanceof Element) || target.id === OVERLAY_ID || target.closest(`#${OVERLAY_ID}`)) {
+    if (!(target instanceof Element) || isInspectorElement(target)) {
       return null;
     }
 
@@ -128,11 +162,16 @@
       return null;
     }
 
-    return document.elementFromPoint(event.clientX, event.clientY);
+    return document.elementsFromPoint(event.clientX, event.clientY)
+      .find((element) => !isInspectorElement(element)) ?? null;
   }
 
   function getComposedPathElement(event) {
-    return event.composedPath?.().find((entry) => entry instanceof Element) ?? null;
+    return event.composedPath?.().find((entry) => entry instanceof Element && !isInspectorElement(entry)) ?? null;
+  }
+
+  function isInspectorElement(element) {
+    return element.id === OVERLAY_HOST_ID || element.id === OVERLAY_ID || Boolean(element.closest?.(`#${OVERLAY_HOST_ID}`));
   }
 
   function getDeepestTextElement(root) {
@@ -419,66 +458,73 @@
     const rect = element.getBoundingClientRect();
     const styles = window.getComputedStyle(element);
 
-    overlay.style.setProperty("transform", `translate(${Math.max(rect.left, 0)}px, ${Math.max(rect.top, 0)}px)`, "important");
-    overlay.style.setProperty("width", `${Math.max(rect.width, 1)}px`, "important");
-    overlay.style.setProperty("height", `${Math.max(rect.height, 1)}px`, "important");
-    overlay.dataset.label = `${styles.fontFamily} / ${styles.fontSize} / ${styles.fontWeight}`;
+    overlay.style.transform = `translate(${Math.max(rect.left, 0)}px, ${Math.max(rect.top, 0)}px)`;
+    overlay.style.width = `${Math.max(rect.width, 1)}px`;
+    overlay.style.height = `${Math.max(rect.height, 1)}px`;
+    overlayLabel.textContent = `${styles.fontFamily} / ${styles.fontSize} / ${styles.fontWeight}`;
   }
 
   function ensureOverlay() {
-    if (overlay) {
+    if (overlayHost && overlay && overlayLabel) {
       return;
     }
 
+    overlayHost = document.createElement("div");
+    overlayHost.id = OVERLAY_HOST_ID;
+    overlayHost.setAttribute("aria-hidden", "true");
+
+    const shadowRoot = overlayHost.attachShadow({ mode: "closed" });
+    const style = document.createElement("style");
     overlay = document.createElement("div");
     overlay.id = OVERLAY_ID;
-    overlay.setAttribute("aria-hidden", "true");
-    document.documentElement.append(overlay);
-  }
+    overlayLabel = document.createElement("div");
+    overlayLabel.className = "label";
 
-  function ensureStyle() {
-    if (document.getElementById(STYLE_ID)) {
-      return;
-    }
-
-    const style = document.createElement("style");
-    style.id = STYLE_ID;
     style.textContent = `
-      #${OVERLAY_ID} {
-        all: initial !important;
-        position: fixed !important;
-        z-index: 2147483647 !important;
-        box-sizing: border-box !important;
-        display: block !important;
-        border: 2px solid #10b981 !important;
-        border-radius: 6px !important;
-        background: rgb(16 185 129 / 0.08) !important;
-        box-shadow: 0 0 0 99999px rgb(2 6 23 / 0.08) !important;
-        color: #052e1a !important;
-        font: 700 11px/1.2 system-ui, sans-serif !important;
-        pointer-events: none !important;
-        transition: transform 80ms ease, width 80ms ease, height 80ms ease !important;
+      :host {
+        all: initial;
+        position: fixed;
+        inset: 0;
+        z-index: 2147483647;
+        display: block;
+        pointer-events: auto;
+        cursor: crosshair;
       }
 
-      #${OVERLAY_ID}::before {
-        all: initial !important;
-        position: absolute !important;
-        left: -2px !important;
-        bottom: calc(100% + 4px) !important;
-        max-width: min(360px, 90vw) !important;
-        border-radius: 999px !important;
-        padding: 6px 9px !important;
-        background: #a7f3d0 !important;
-        color: #052e1a !important;
-        content: attr(data-label) !important;
-        display: block !important;
-        font: 700 11px/1.2 system-ui, sans-serif !important;
-        overflow: hidden !important;
-        text-overflow: ellipsis !important;
-        white-space: nowrap !important;
+      #${OVERLAY_ID} {
+        all: initial;
+        position: fixed;
+        box-sizing: border-box;
+        display: block;
+        border: 2px solid #10b981;
+        border-radius: 6px;
+        background: rgb(16 185 129 / 0.08);
+        box-shadow: 0 0 0 99999px rgb(2 6 23 / 0.08);
+        pointer-events: none;
+        transition: transform 80ms ease, width 80ms ease, height 80ms ease;
+      }
+
+      .label {
+        all: initial;
+        position: absolute;
+        left: -2px;
+        bottom: calc(100% + 4px);
+        max-width: min(360px, 90vw);
+        border-radius: 999px;
+        padding: 6px 9px;
+        background: #a7f3d0;
+        color: #052e1a;
+        display: block;
+        font: 700 11px/1.2 system-ui, sans-serif;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
     `;
-    document.documentElement.append(style);
+
+    overlay.append(overlayLabel);
+    shadowRoot.append(style, overlay);
+    document.documentElement.append(overlayHost);
   }
 
   function isRecord(value) {
