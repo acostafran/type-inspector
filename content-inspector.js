@@ -105,7 +105,11 @@
 
     if (!candidate) {
       highlightedElement = null;
-      updateUnavailableOverlay(event, "Cannot inspect text inside this embedded content");
+      if (isEmbeddedContentTarget(event)) {
+        updateUnavailableOverlay(event, "Cannot inspect text inside this embedded content");
+      } else {
+        hideOverlay();
+      }
       return;
     }
 
@@ -153,16 +157,61 @@
   }
 
   function getInspectableElement(event) {
+    const textNodeElement = getTextNodeElementFromPoint(event);
+
+    if (textNodeElement) {
+      return textNodeElement;
+    }
+
     const target = getTargetFromPoint(event) ?? getComposedPathElement(event);
 
     if (!(target instanceof Element) || isInspectorElement(target)) {
       return null;
     }
 
-    const element = getDeepestTextElement(target) ?? target.closest(TEXT_ELEMENT_SELECTOR) ?? target;
+    const element = getDeepestTextElementAtPoint(target, event.clientX, event.clientY)
+      ?? target.closest(TEXT_ELEMENT_SELECTOR)
+      ?? target;
     const text = element.textContent?.trim();
 
     return text ? element : null;
+  }
+
+  function getTextNodeElementFromPoint(event) {
+    if (!Number.isFinite(event.clientX) || !Number.isFinite(event.clientY)) {
+      return null;
+    }
+
+    const position = getCaretPositionFromPoint(event.clientX, event.clientY);
+    const node = position?.node;
+
+    if (node?.nodeType !== Node.TEXT_NODE || !node.textContent?.trim()) {
+      return null;
+    }
+
+    const parentElement = node.parentElement;
+
+    if (!parentElement || isInspectorElement(parentElement) || !isVisibleElement(parentElement)) {
+      return null;
+    }
+
+    return parentElement.closest(TEXT_ELEMENT_SELECTOR) ?? parentElement;
+  }
+
+  function getCaretPositionFromPoint(clientX, clientY) {
+    if (document.caretPositionFromPoint) {
+      const position = document.caretPositionFromPoint(clientX, clientY);
+
+      return position ? { node: position.offsetNode, offset: position.offset } : null;
+    }
+
+    if (document.caretRangeFromPoint) {
+      const range = document.caretRangeFromPoint(clientX, clientY);
+
+      return range ? { node: range.startContainer, offset: range.startOffset } : null;
+    }
+
+    return null;
   }
 
   function getTargetFromPoint(event) {
@@ -201,11 +250,26 @@
     return element.id === OVERLAY_HOST_ID || element.id === OVERLAY_ID || Boolean(element.closest?.(`#${OVERLAY_HOST_ID}`));
   }
 
-  function getDeepestTextElement(root) {
+  function getDeepestTextElementAtPoint(root, clientX, clientY) {
     const matches = Array.from(root.querySelectorAll?.(TEXT_ELEMENT_SELECTOR) ?? [])
-      .filter((element) => element.textContent?.trim() && isVisibleElement(element));
+      .filter((element) => element.textContent?.trim() && isVisibleElement(element) && containsPoint(element, clientX, clientY));
 
     return matches.at(-1) ?? (root.matches?.(TEXT_ELEMENT_SELECTOR) ? root : null);
+  }
+
+  function containsPoint(element, clientX, clientY) {
+    return Array.from(element.getClientRects()).some((rect) => (
+      clientX >= rect.left
+      && clientX <= rect.right
+      && clientY >= rect.top
+      && clientY <= rect.bottom
+    ));
+  }
+
+  function isEmbeddedContentTarget(event) {
+    const target = getTargetFromPoint(event) ?? getComposedPathElement(event);
+
+    return target instanceof Element && Boolean(target.closest("iframe, embed, object"));
   }
 
   function captureTypography(element) {
@@ -502,6 +566,12 @@
     overlayUnavailable.hidden = false;
     overlayUnavailable.style.transform = `translate(${Math.max(event.clientX + 12, 0)}px, ${Math.max(event.clientY + 12, 0)}px)`;
     overlayUnavailable.textContent = message;
+  }
+
+  function hideOverlay() {
+    ensureOverlay();
+    overlay.hidden = true;
+    overlayUnavailable.hidden = true;
   }
 
   function ensureOverlay() {
