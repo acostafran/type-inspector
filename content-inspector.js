@@ -435,17 +435,21 @@
           continue;
         }
 
-        try {
-          if (element.matches(rule.selectorText)) {
+        for (const selector of splitSelectorList(rule.selectorText)) {
+          try {
+            if (!element.matches(selector)) {
+              continue;
+            }
+
             matches.push({
               rule,
               order,
-              selectorText: rule.selectorText,
-              specificity: getSelectorSpecificity(rule.selectorText),
+              selectorText: selector,
+              specificity: calculateSpecificity(selector),
             });
+          } catch {
+            continue;
           }
-        } catch {
-          continue;
         }
       }
     }
@@ -461,12 +465,52 @@
     return (a.ids - b.ids) || (a.classes - b.classes) || (a.elements - b.elements);
   }
 
-  function getSelectorSpecificity(selectorText) {
-    return selectorText
-      .split(",")
-      .map((selector) => calculateSpecificity(selector))
-      .sort(compareSpecificity)
-      .at(-1) ?? { ids: 0, classes: 0, elements: 0 };
+  function splitSelectorList(selectorText) {
+    const selectors = [];
+    let current = "";
+    let depth = 0;
+    let quote = "";
+
+    for (const character of selectorText) {
+      if (quote) {
+        current += character;
+
+        if (character === quote) {
+          quote = "";
+        }
+
+        continue;
+      }
+
+      if (character === "\"" || character === "'") {
+        quote = character;
+        current += character;
+        continue;
+      }
+
+      if (character === "(" || character === "[") {
+        depth += 1;
+      } else if (character === ")" || character === "]") {
+        depth = Math.max(depth - 1, 0);
+      }
+
+      if (character === "," && depth === 0) {
+        if (current.trim()) {
+          selectors.push(current.trim());
+        }
+
+        current = "";
+        continue;
+      }
+
+      current += character;
+    }
+
+    if (current.trim()) {
+      selectors.push(current.trim());
+    }
+
+    return selectors;
   }
 
   function calculateSpecificity(selector) {
