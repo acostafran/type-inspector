@@ -292,7 +292,8 @@
       backgroundColor: getVisibleBackgroundColor(element),
       tagName: element.tagName.toLowerCase(),
       element: describeElement(element),
-      styleSource: getStyleSource(element),
+      topSelector: getTopSpecificitySelector(element),
+      fontFamilySelector: getPropertySelector(element, "font-family"),
       fontOrigin: getFontOrigin(renderedFontFamily, families),
       pageSummary: capturePageSummary(),
       capturedAt: new Date().toISOString(),
@@ -306,12 +307,6 @@
     const weights = new Map();
     const headingStyles = new Map();
     const bodyStyles = new Map();
-    const tokenValues = {
-      fontSizes: new Map(),
-      lineHeights: new Map(),
-      letterSpacings: new Map(),
-      colors: new Map(),
-    };
 
     for (const element of summaryElements) {
       const styles = window.getComputedStyle(element);
@@ -323,10 +318,6 @@
       increment(sizes, styles.fontSize);
       increment(weights, styles.fontWeight);
       increment(isHeadingElement(element) ? headingStyles : bodyStyles, pattern);
-      increment(tokenValues.fontSizes, styles.fontSize);
-      increment(tokenValues.lineHeights, styles.lineHeight);
-      increment(tokenValues.letterSpacings, styles.letterSpacing);
-      increment(tokenValues.colors, styles.color);
     }
 
     return {
@@ -336,12 +327,6 @@
       commonWeights: topEntries(weights, 10),
       headingPatterns: topEntries(headingStyles, 6),
       bodyPatterns: topEntries(bodyStyles, 6),
-      possibleDesignTokens: {
-        fontSizes: repeatedEntries(tokenValues.fontSizes, 12),
-        lineHeights: repeatedEntries(tokenValues.lineHeights, 10),
-        letterSpacings: repeatedEntries(tokenValues.letterSpacings, 8),
-        colors: repeatedEntries(tokenValues.colors, 12),
-      },
     };
   }
 
@@ -409,13 +394,30 @@
     return window.getComputedStyle(document.documentElement).backgroundColor || "transparent";
   }
 
-  function getStyleSource(element) {
-    const matches = [];
-    const inlineStyle = element.getAttribute("style");
+  function getTopSpecificitySelector(element) {
+    const matches = getMatchingStyleRules(element)
+      .sort(compareRuleMatch)
+      .reverse();
 
-    if (inlineStyle) {
-      matches.push("inline style");
+    return matches[0]?.selectorText ?? "inline/computed style";
+  }
+
+  function getPropertySelector(element, propertyName) {
+    if (element.style.getPropertyValue(propertyName)) {
+      return "inline style";
     }
+
+    const matches = getMatchingStyleRules(element)
+      .filter((match) => match.rule.style.getPropertyValue(propertyName))
+      .sort(compareRuleMatch)
+      .reverse();
+
+    return matches[0]?.selectorText ?? "inherited/computed style";
+  }
+
+  function getMatchingStyleRules(element) {
+    const matches = [];
+    let order = 0;
 
     for (const sheet of Array.from(document.styleSheets)) {
       let rules;
@@ -427,13 +429,20 @@
       }
 
       for (const rule of Array.from(rules)) {
-        if (!(rule instanceof CSSStyleRule) || !hasTypographyDeclaration(rule.style)) {
+        order += 1;
+
+        if (!(rule instanceof CSSStyleRule)) {
           continue;
         }
 
         try {
           if (element.matches(rule.selectorText)) {
-            matches.push(rule.selectorText);
+            matches.push({
+              rule,
+              order,
+              selectorText: rule.selectorText,
+              specificity: getSelectorSpecificity(rule.selectorText),
+            });
           }
         } catch {
           continue;
@@ -441,22 +450,35 @@
       }
     }
 
-    return matches.slice(-5).join(" | ") || "computed/inherited styles";
+    return matches;
   }
 
-  function hasTypographyDeclaration(style) {
-    return [
-      "font-family",
-      "font-size",
-      "font-weight",
-      "font-style",
-      "line-height",
-      "letter-spacing",
-      "word-spacing",
-      "text-transform",
-      "text-decoration",
-      "color",
-    ].some((property) => style.getPropertyValue(property));
+  function compareRuleMatch(a, b) {
+    return compareSpecificity(a.specificity, b.specificity) || a.order - b.order;
+  }
+
+  function compareSpecificity(a, b) {
+    return (a.ids - b.ids) || (a.classes - b.classes) || (a.elements - b.elements);
+  }
+
+  function getSelectorSpecificity(selectorText) {
+    return selectorText
+      .split(",")
+      .map((selector) => calculateSpecificity(selector))
+      .sort(compareSpecificity)
+      .at(-1) ?? { ids: 0, classes: 0, elements: 0 };
+  }
+
+  function calculateSpecificity(selector) {
+    const withoutStrings = selector.replace(/(['"]).*?\1/g, "");
+    const ids = (withoutStrings.match(/#[\w-]+/g) ?? []).length;
+    const classes = (withoutStrings.match(/\.[\w-]+|\[[^\]]+\]|:(?!:)[\w-]+(?:\([^)]*\))?/g) ?? []).length;
+    const elements = (withoutStrings
+      .replace(/#[\w-]+/g, " ")
+      .replace(/\.[\w-]+|\[[^\]]+\]|:{1,2}[\w-]+(?:\([^)]*\))?/g, " ")
+      .match(/(^|[\s>+~])([a-z][\w-]*)/gi) ?? []).length;
+
+    return { ids, classes, elements };
   }
 
   function getFontOrigin(renderedFontFamily, families) {
@@ -540,10 +562,6 @@
     return Array.from(map, ([value, count]) => ({ value, count }))
       .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value))
       .slice(0, limit);
-  }
-
-  function repeatedEntries(map, limit) {
-    return topEntries(map, limit).filter((entry) => entry.count > 1);
   }
 
   function updateOverlay(element) {

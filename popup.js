@@ -1,7 +1,7 @@
 const STORAGE_KEY = "latestCapture";
 const FIELD_NAMES = [
-  "renderedFontFamily",
   "fontFamily",
+  "renderedFontFamily",
   "fontOrigin",
   "fontSize",
   "fontWeight",
@@ -13,9 +13,10 @@ const FIELD_NAMES = [
   "textDecoration",
   "color",
   "backgroundColor",
+  "topSelector",
+  "fontFamilySelector",
   "tagName",
   "element",
-  "styleSource",
 ];
 const CSS_PROPERTY_BY_FIELD = {
   renderedFontFamily: "font-family",
@@ -38,7 +39,6 @@ const SUMMARY_LIST_NAMES = [
   "headingPatterns",
   "bodyPatterns",
 ];
-const TOKEN_LIST_NAMES = ["fontSizes", "lineHeights", "letterSpacings", "colors"];
 
 const inspectButton = document.querySelector("#inspect-button");
 const copyButton = document.querySelector("#copy-button");
@@ -55,9 +55,6 @@ const ruleOutputs = new Map(
 );
 const summaryLists = new Map(
   Array.from(document.querySelectorAll("[data-summary-list]"), (element) => [element.dataset.summaryList, element]),
-);
-const tokenLists = new Map(
-  Array.from(document.querySelectorAll("[data-token-list]"), (element) => [element.dataset.tokenList, element]),
 );
 
 let latestCapture = null;
@@ -225,9 +222,6 @@ function renderPageSummary(summary) {
     renderEntryList(summaryLists.get(listName), summary[listName]);
   }
 
-  for (const tokenName of TOKEN_LIST_NAMES) {
-    renderTokenList(tokenLists.get(tokenName), summary.possibleDesignTokens[tokenName]);
-  }
 }
 
 function renderEntryList(list, entries) {
@@ -244,15 +238,6 @@ function renderEntryList(list, entries) {
   }
 }
 
-function renderTokenList(output, entries) {
-  if (!output) {
-    return;
-  }
-
-  const values = normalizeEntries(entries).map((entry) => `${entry.value} (${entry.count})`);
-  output.textContent = values.length ? values.join(", ") : "No repeated values";
-}
-
 function createEntryItem(entry) {
   const item = document.createElement("li");
   item.textContent = `${entry.value} (${entry.count})`;
@@ -262,8 +247,8 @@ function createEntryItem(entry) {
 
 function formatCapture(capture) {
   const detailLines = [
-    `Rendered font: ${capture.renderedFontFamily || "--"}`,
     `Declared font-family: ${capture.fontFamily || "--"}`,
+    `Rendered font: ${capture.renderedFontFamily || "--"}`,
     `Font origin: ${capture.fontOrigin || "--"}`,
     `Size: ${capture.fontSize || "--"}`,
     `Weight: ${capture.fontWeight || "--"}`,
@@ -275,9 +260,10 @@ function formatCapture(capture) {
     `Text decoration: ${capture.textDecoration || "--"}`,
     `Color: ${capture.color || "--"}`,
     `Background: ${capture.backgroundColor || "--"}`,
+    `Top selector: ${capture.topSelector || "--"}`,
+    `Font-family selector: ${capture.fontFamilySelector || "--"}`,
     `Tag: ${capture.tagName || "--"}`,
     `Element: ${capture.element || "--"}`,
-    `Style source: ${capture.styleSource || "--"}`,
   ];
   const summary = capture.pageSummary;
 
@@ -294,10 +280,6 @@ function formatCapture(capture) {
     `Common weights: ${formatEntries(summary.commonWeights)}`,
     `Heading patterns: ${formatEntries(summary.headingPatterns)}`,
     `Body patterns: ${formatEntries(summary.bodyPatterns)}`,
-    `Possible size tokens: ${formatEntries(summary.possibleDesignTokens.fontSizes)}`,
-    `Possible line-height tokens: ${formatEntries(summary.possibleDesignTokens.lineHeights)}`,
-    `Possible letter-spacing tokens: ${formatEntries(summary.possibleDesignTokens.letterSpacings)}`,
-    `Possible color tokens: ${formatEntries(summary.possibleDesignTokens.colors)}`,
   ].join("\n");
 }
 
@@ -340,10 +322,7 @@ function isPageSummary(value) {
   return value !== null
     && typeof value === "object"
     && typeof value.scannedVisibleTextElements === "string"
-    && SUMMARY_LIST_NAMES.every((fieldName) => Array.isArray(value[fieldName]))
-    && value.possibleDesignTokens !== null
-    && typeof value.possibleDesignTokens === "object"
-    && TOKEN_LIST_NAMES.every((fieldName) => Array.isArray(value.possibleDesignTokens[fieldName]));
+    && SUMMARY_LIST_NAMES.every((fieldName) => Array.isArray(value[fieldName]));
 }
 
 function normalizeEntries(entries) {

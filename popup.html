@@ -11,7 +11,6 @@
       <header class="hero">
         <div>
           <p class="eyebrow">Type Inspector</p>
-          <h1>Inspect page typography locally.</h1>
         </div>
         <button id="inspect-button" type="button">Inspect text</button>
       </header>
@@ -27,8 +26,8 @@
         <div id="empty-state" class="empty-state">No typography captured yet.</div>
 
         <dl id="result-list" class="result-list" hidden>
-          <div class="result-row"><dt>Rendered font</dt><dd><button class="field-copy" type="button" data-field="renderedFontFamily"></button></dd><dd><button class="rule-copy" type="button" data-rule-field="renderedFontFamily" aria-label="Copy rendered font CSS rule">{}</button></dd></div>
           <div class="result-row"><dt>Declared stack</dt><dd><button class="field-copy" type="button" data-field="fontFamily"></button></dd><dd><button class="rule-copy" type="button" data-rule-field="fontFamily" aria-label="Copy font family CSS rule">{}</button></dd></div>
+          <div class="result-row"><dt>Rendered font</dt><dd><button class="field-copy" type="button" data-field="renderedFontFamily"></button></dd><dd><button class="rule-copy" type="button" data-rule-field="renderedFontFamily" aria-label="Copy rendered font CSS rule">{}</button></dd></div>
           <div class="result-row"><dt>Font origin</dt><dd><button class="field-copy" type="button" data-field="fontOrigin"></button></dd><dd><button class="rule-copy" type="button" data-rule-field="fontOrigin" aria-label="Copy font origin CSS rule">{}</button></dd></div>
           <div class="result-row"><dt>Size</dt><dd><button class="field-copy" type="button" data-field="fontSize"></button></dd><dd><button class="rule-copy" type="button" data-rule-field="fontSize" aria-label="Copy font size CSS rule">{}</button></dd></div>
           <div class="result-row"><dt>Weight</dt><dd><button class="field-copy" type="button" data-field="fontWeight"></button></dd><dd><button class="rule-copy" type="button" data-rule-field="fontWeight" aria-label="Copy font weight CSS rule">{}</button></dd></div>
@@ -40,9 +39,10 @@
           <div class="result-row"><dt>Decoration</dt><dd><button class="field-copy" type="button" data-field="textDecoration"></button></dd><dd><button class="rule-copy" type="button" data-rule-field="textDecoration" aria-label="Copy text decoration CSS rule">{}</button></dd></div>
           <div class="result-row"><dt>Color</dt><dd><button class="field-copy" type="button" data-field="color"></button></dd><dd><button class="rule-copy" type="button" data-rule-field="color" aria-label="Copy color CSS rule">{}</button></dd></div>
           <div class="result-row"><dt>Background</dt><dd><button class="field-copy" type="button" data-field="backgroundColor"></button></dd><dd><button class="rule-copy" type="button" data-rule-field="backgroundColor" aria-label="Copy background color CSS rule">{}</button></dd></div>
+          <div class="result-row"><dt>Top selector</dt><dd><button class="field-copy" type="button" data-field="topSelector"></button></dd><dd><button class="rule-copy" type="button" data-rule-field="topSelector" aria-label="Copy top selector CSS rule">{}</button></dd></div>
+          <div class="result-row"><dt>Font selector</dt><dd><button class="field-copy" type="button" data-field="fontFamilySelector"></button></dd><dd><button class="rule-copy" type="button" data-rule-field="fontFamilySelector" aria-label="Copy font selector CSS rule">{}</button></dd></div>
           <div class="result-row"><dt>Tag</dt><dd><button class="field-copy" type="button" data-field="tagName"></button></dd><dd><button class="rule-copy" type="button" data-rule-field="tagName" aria-label="Copy tag CSS rule">{}</button></dd></div>
           <div class="result-row"><dt>Element</dt><dd><button class="field-copy" type="button" data-field="element"></button></dd><dd><button class="rule-copy" type="button" data-rule-field="element" aria-label="Copy element CSS rule">{}</button></dd></div>
-          <div class="result-row"><dt>Style source</dt><dd><button class="field-copy" type="button" data-field="styleSource"></button></dd><dd><button class="rule-copy" type="button" data-rule-field="styleSource" aria-label="Copy style source CSS rule">{}</button></dd></div>
         </dl>
       </section>
 
@@ -72,16 +72,6 @@
             <ol data-summary-list="bodyPatterns"></ol>
           </section>
         </div>
-
-        <section aria-labelledby="tokens-title">
-          <h3 id="tokens-title">Possible design tokens</h3>
-          <dl class="token-list">
-            <div><dt>Font sizes</dt><dd data-token-list="fontSizes"></dd></div>
-            <div><dt>Line heights</dt><dd data-token-list="lineHeights"></dd></div>
-            <div><dt>Letter spacing</dt><dd data-token-list="letterSpacings"></dd></div>
-            <div><dt>Colors</dt><dd data-token-list="colors"></dd></div>
-          </dl>
-        </section>
       </section>
 
       <section class="privacy-note" aria-labelledby="privacy-title">

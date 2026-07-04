@@ -104,12 +104,6 @@ h3 {
   text-transform: uppercase;
 }
 
-h1 {
-  max-width: 210px;
-  font-size: 20px;
-  line-height: 1.05;
-}
-
 h2 {
   font-size: 14px;
 }
@@ -153,16 +147,11 @@ h3 {
   gap: 7px;
 }
 
-.result-row,
-.token-list div {
+.result-row {
   display: grid;
   grid-template-columns: 112px minmax(0, 1fr) 34px;
   gap: 10px;
   align-items: start;
-}
-
-.token-list div {
-  grid-template-columns: 112px minmax(0, 1fr);
 }
 
 dt {
@@ -203,10 +192,4 @@ ol {
 
 li {
   overflow-wrap: anywhere;
-}
-
-.token-list {
-  display: grid;
-  gap: 7px;
-  margin-top: 8px;
 }
