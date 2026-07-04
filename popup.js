@@ -4,15 +4,16 @@ const FIELD_NAMES = [
   "renderedFontFamily",
   "fontOrigin",
   "fontSize",
+  "lineHeight",
   "fontWeight",
   "fontStyle",
-  "lineHeight",
   "letterSpacing",
   "wordSpacing",
   "textTransform",
   "textDecoration",
   "color",
   "backgroundColor",
+  "contrastRatio",
   "topSelector",
   "fontFamilySelector",
   "tagName",
@@ -33,6 +34,7 @@ const CSS_PROPERTY_BY_FIELD = {
   color: "color",
   backgroundColor: "background-color",
 };
+const COLOR_FIELDS = new Set(["color", "backgroundColor"]);
 const SUMMARY_LIST_NAMES = [
   "uniqueFontFamilies",
   "commonSizes",
@@ -211,13 +213,14 @@ function renderCapture(capture) {
   }
 
   latestCapture = capture;
+  capture.contrastRatio = getContrastText(capture.color, capture.backgroundColor);
 
   for (const fieldName of FIELD_NAMES) {
     const output = fieldOutputs.get(fieldName);
 
     if (output) {
       const value = capture[fieldName] || "--";
-      output.textContent = value;
+      renderFieldValue(output, fieldName, value);
       output.title = `Copy ${getFieldLabel(fieldName)}: ${value}`;
       output.disabled = !capture[fieldName];
     }
@@ -290,16 +293,17 @@ function formatCapture(capture) {
     `Font origin: ${capture.fontOrigin || "--"}`,
     `Size: ${capture.fontSize || "--"}`,
     `Declared size rule: ${capture.declaredFontSizeRule || "--"}`,
-    `Weight: ${capture.fontWeight || "--"}`,
-    `Style: ${capture.fontStyle || "--"}`,
     `Line height: ${capture.lineHeight || "--"}`,
     `Declared line-height rule: ${capture.declaredLineHeightRule || "--"}`,
+    `Weight: ${capture.fontWeight || "--"}`,
+    `Style: ${capture.fontStyle || "--"}`,
     `Letter spacing: ${capture.letterSpacing || "--"}`,
     `Word spacing: ${capture.wordSpacing || "--"}`,
     `Text transform: ${capture.textTransform || "--"}`,
     `Text decoration: ${capture.textDecoration || "--"}`,
     `Color: ${capture.color || "--"}`,
     `Background: ${capture.backgroundColor || "--"}`,
+    `Contrast: ${capture.contrastRatio || getContrastText(capture.color, capture.backgroundColor) || "--"}`,
     `Top selector: ${capture.topSelector || "--"}`,
     `Font-family selector: ${capture.fontFamilySelector || "--"}`,
     `Tag: ${capture.tagName || "--"}`,
@@ -321,6 +325,23 @@ function formatCapture(capture) {
     `Heading patterns: ${formatEntries(summary.headingPatterns)}`,
     `Body patterns: ${formatEntries(summary.bodyPatterns)}`,
   ].join("\n");
+}
+
+function renderFieldValue(output, fieldName, value) {
+  output.replaceChildren();
+
+  if (COLOR_FIELDS.has(fieldName)) {
+    const swatch = document.createElement("span");
+    const label = document.createElement("span");
+
+    swatch.className = "color-swatch";
+    swatch.style.backgroundColor = value;
+    label.textContent = value;
+    output.append(swatch, label);
+    return;
+  }
+
+  output.textContent = value;
 }
 
 function setStatus(message) {
@@ -345,6 +366,54 @@ function getCssRule(fieldName, capture = latestCapture) {
   }
 
   return `${cssProperty}: ${capture[fieldName]};`;
+}
+
+function getContrastText(foreground, background) {
+  const foregroundRgb = parseRgbColor(foreground);
+  const backgroundRgb = parseRgbColor(background);
+
+  if (!foregroundRgb || !backgroundRgb) {
+    return "Unavailable";
+  }
+
+  const ratio = getContrastRatio(foregroundRgb, backgroundRgb);
+  const aaNormal = ratio >= 4.5 ? "AA normal pass" : "AA normal fail";
+  const aaLarge = ratio >= 3 ? "AA large pass" : "AA large fail";
+
+  return `${ratio.toFixed(2)}:1 (${aaNormal}, ${aaLarge})`;
+}
+
+function parseRgbColor(value) {
+  const match = /^rgba?\(([^)]+)\)$/.exec(value || "");
+
+  if (!match) {
+    return null;
+  }
+
+  const parts = match[1].split(",").map((part) => Number.parseFloat(part.trim()));
+
+  if (parts.length < 3 || parts.slice(0, 3).some((part) => Number.isNaN(part))) {
+    return null;
+  }
+
+  return parts.slice(0, 3).map((part) => Math.min(Math.max(part, 0), 255));
+}
+
+function getContrastRatio(foreground, background) {
+  const lighter = Math.max(getRelativeLuminance(foreground), getRelativeLuminance(background));
+  const darker = Math.min(getRelativeLuminance(foreground), getRelativeLuminance(background));
+
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+function getRelativeLuminance(rgb) {
+  const [red, green, blue] = rgb.map((channel) => {
+    const normalized = channel / 255;
+
+    return normalized <= 0.03928 ? normalized / 12.92 : ((normalized + 0.055) / 1.055) ** 2.4;
+  });
+
+  return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
 }
 
 function isInspectableUrl(url) {
