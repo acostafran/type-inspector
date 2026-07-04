@@ -30,9 +30,9 @@ button:focus-visible {
   outline-offset: 2px;
 }
 
-.field-copy {
+.field-copy,
+.rule-copy {
   display: block;
-  width: 100%;
   min-width: 0;
   border: 1px solid rgb(255 255 255 / 0.1);
   border-radius: 9px;
@@ -47,7 +47,21 @@ button:focus-visible {
   text-align: left;
 }
 
-.field-copy:hover:not(:disabled) {
+.field-copy {
+  width: 100%;
+}
+
+.rule-copy {
+  width: 34px;
+  height: 100%;
+  min-height: 30px;
+  padding: 5px;
+  color: #a7f3d0;
+  text-align: center;
+}
+
+.field-copy:hover:not(:disabled),
+.rule-copy:hover:not(:disabled) {
   border-color: rgb(167 243 208 / 0.6);
   background: rgb(167 243 208 / 0.08);
 }
@@ -139,12 +153,16 @@ h3 {
   gap: 7px;
 }
 
-.result-list div,
+.result-row,
 .token-list div {
   display: grid;
-  grid-template-columns: 112px minmax(0, 1fr);
+  grid-template-columns: 112px minmax(0, 1fr) 34px;
   gap: 10px;
   align-items: start;
+}
+
+.token-list div {
+  grid-template-columns: 112px minmax(0, 1fr);
 }
 
 dt {

@@ -17,6 +17,20 @@ const FIELD_NAMES = [
   "element",
   "styleSource",
 ];
+const CSS_PROPERTY_BY_FIELD = {
+  renderedFontFamily: "font-family",
+  fontFamily: "font-family",
+  fontSize: "font-size",
+  fontWeight: "font-weight",
+  fontStyle: "font-style",
+  lineHeight: "line-height",
+  letterSpacing: "letter-spacing",
+  wordSpacing: "word-spacing",
+  textTransform: "text-transform",
+  textDecoration: "text-decoration",
+  color: "color",
+  backgroundColor: "background-color",
+};
 const SUMMARY_LIST_NAMES = [
   "uniqueFontFamilies",
   "commonSizes",
@@ -35,6 +49,9 @@ const summaryCard = document.querySelector("#summary-card");
 const summaryCount = document.querySelector("[data-summary-count]");
 const fieldOutputs = new Map(
   Array.from(document.querySelectorAll("[data-field]"), (element) => [element.dataset.field, element]),
+);
+const ruleOutputs = new Map(
+  Array.from(document.querySelectorAll("[data-rule-field]"), (element) => [element.dataset.ruleField, element]),
 );
 const summaryLists = new Map(
   Array.from(document.querySelectorAll("[data-summary-list]"), (element) => [element.dataset.summaryList, element]),
@@ -56,6 +73,12 @@ copyButton.addEventListener("click", () => {
 for (const [fieldName, button] of fieldOutputs) {
   button.addEventListener("click", () => {
     void copyField(fieldName);
+  });
+}
+
+for (const [fieldName, button] of ruleOutputs) {
+  button.addEventListener("click", () => {
+    void copyRule(fieldName);
   });
 }
 
@@ -127,6 +150,22 @@ async function copyField(fieldName) {
   }
 }
 
+async function copyRule(fieldName) {
+  const rule = getCssRule(fieldName);
+
+  if (!rule) {
+    return;
+  }
+
+  try {
+    await navigator.clipboard.writeText(rule);
+    setStatus(`${getFieldLabel(fieldName)} CSS rule copied.`);
+  } catch (error) {
+    console.warn("Could not copy typography CSS rule.", error);
+    setStatus("Could not copy that CSS rule.");
+  }
+}
+
 function renderCapture(capture) {
   if (!isCapture(capture)) {
     latestCapture = null;
@@ -135,6 +174,10 @@ function renderCapture(capture) {
     summaryCard.hidden = true;
     for (const button of fieldOutputs.values()) {
       button.textContent = "--";
+      button.disabled = true;
+      button.removeAttribute("title");
+    }
+    for (const button of ruleOutputs.values()) {
       button.disabled = true;
       button.removeAttribute("title");
     }
@@ -152,6 +195,14 @@ function renderCapture(capture) {
       output.textContent = value;
       output.title = `Copy ${getFieldLabel(fieldName)}: ${value}`;
       output.disabled = !capture[fieldName];
+    }
+
+    const ruleOutput = ruleOutputs.get(fieldName);
+
+    if (ruleOutput) {
+      const rule = getCssRule(fieldName, capture);
+      ruleOutput.disabled = !rule;
+      ruleOutput.title = rule ? `Copy ${rule}` : "No CSS rule available";
     }
   }
 
@@ -258,6 +309,20 @@ function getFieldLabel(fieldName) {
   return fieldName
     .replace(/([A-Z])/g, " $1")
     .replace(/^./, (character) => character.toUpperCase());
+}
+
+function getCssRule(fieldName, capture = latestCapture) {
+  if (!capture || typeof capture[fieldName] !== "string") {
+    return "";
+  }
+
+  const cssProperty = CSS_PROPERTY_BY_FIELD[fieldName];
+
+  if (!cssProperty) {
+    return "";
+  }
+
+  return `${cssProperty}: ${capture[fieldName]};`;
 }
 
 function isInspectableUrl(url) {

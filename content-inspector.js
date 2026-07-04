@@ -48,6 +48,7 @@
   let overlayHost = null;
   let overlay = null;
   let overlayLabel = null;
+  let overlayUnavailable = null;
   let active = false;
   let highlightedElement = null;
 
@@ -95,13 +96,20 @@
     overlayHost = null;
     overlay = null;
     overlayLabel = null;
+    overlayUnavailable = null;
     chrome.runtime.sendMessage({ type: "type-inspector:ended" });
   }
 
   function handleMouseMove(event) {
     const candidate = getInspectableElement(event);
 
-    if (!candidate || candidate === highlightedElement) {
+    if (!candidate) {
+      highlightedElement = null;
+      updateUnavailableOverlay(event, "Cannot inspect text inside this embedded content");
+      return;
+    }
+
+    if (candidate === highlightedElement) {
       return;
     }
 
@@ -162,12 +170,31 @@
       return null;
     }
 
-    return document.elementsFromPoint(event.clientX, event.clientY)
+    const rootTarget = document.elementsFromPoint(event.clientX, event.clientY)
       .find((element) => !isInspectorElement(element)) ?? null;
+
+    return getDeepestElementFromPoint(rootTarget, event.clientX, event.clientY);
   }
 
   function getComposedPathElement(event) {
     return event.composedPath?.().find((entry) => entry instanceof Element && !isInspectorElement(entry)) ?? null;
+  }
+
+  function getDeepestElementFromPoint(element, clientX, clientY) {
+    let current = element;
+
+    while (current?.shadowRoot) {
+      const shadowTarget = current.shadowRoot.elementsFromPoint(clientX, clientY)
+        .find((entry) => entry instanceof Element);
+
+      if (!shadowTarget || shadowTarget === current) {
+        break;
+      }
+
+      current = shadowTarget;
+    }
+
+    return current;
   }
 
   function isInspectorElement(element) {
@@ -424,10 +451,12 @@
 
   function describeElement(element) {
     const tag = element.tagName.toLowerCase();
+    const shadowRoot = element.getRootNode();
+    const shadowPrefix = shadowRoot instanceof ShadowRoot ? "shadow " : "";
     const id = element.id ? `#${safeIdentifier(element.id)}` : "";
     const classNames = Array.from(element.classList).slice(0, 3).map((className) => `.${safeIdentifier(className)}`).join("");
 
-    return `${tag}${id}${classNames}`;
+    return `${shadowPrefix}${tag}${id}${classNames}`;
   }
 
   function safeIdentifier(value) {
@@ -458,14 +487,25 @@
     const rect = element.getBoundingClientRect();
     const styles = window.getComputedStyle(element);
 
+    overlayUnavailable.hidden = true;
+    overlay.hidden = false;
     overlay.style.transform = `translate(${Math.max(rect.left, 0)}px, ${Math.max(rect.top, 0)}px)`;
     overlay.style.width = `${Math.max(rect.width, 1)}px`;
     overlay.style.height = `${Math.max(rect.height, 1)}px`;
     overlayLabel.textContent = `${styles.fontFamily} / ${styles.fontSize} / ${styles.fontWeight}`;
   }
 
+  function updateUnavailableOverlay(event, message) {
+    ensureOverlay();
+
+    overlay.hidden = true;
+    overlayUnavailable.hidden = false;
+    overlayUnavailable.style.transform = `translate(${Math.max(event.clientX + 12, 0)}px, ${Math.max(event.clientY + 12, 0)}px)`;
+    overlayUnavailable.textContent = message;
+  }
+
   function ensureOverlay() {
-    if (overlayHost && overlay && overlayLabel) {
+    if (overlayHost && overlay && overlayLabel && overlayUnavailable) {
       return;
     }
 
@@ -479,6 +519,9 @@
     overlay.id = OVERLAY_ID;
     overlayLabel = document.createElement("div");
     overlayLabel.className = "label";
+    overlayUnavailable = document.createElement("div");
+    overlayUnavailable.className = "unavailable";
+    overlayUnavailable.hidden = true;
 
     style.textContent = `
       :host {
@@ -520,10 +563,25 @@
         text-overflow: ellipsis;
         white-space: nowrap;
       }
+
+      .unavailable {
+        all: initial;
+        position: fixed;
+        max-width: min(320px, 80vw);
+        border: 1px solid rgb(251 191 36 / 0.7);
+        border-radius: 999px;
+        padding: 7px 10px;
+        background: #111827;
+        box-shadow: 0 10px 24px rgb(0 0 0 / 0.24);
+        color: #fde68a;
+        display: block;
+        font: 700 12px/1.2 system-ui, sans-serif;
+        pointer-events: none;
+      }
     `;
 
     overlay.append(overlayLabel);
-    shadowRoot.append(style, overlay);
+    shadowRoot.append(style, overlay, overlayUnavailable);
     document.documentElement.append(overlayHost);
   }
 
