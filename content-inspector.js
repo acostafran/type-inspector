@@ -45,6 +45,18 @@
     "touchstart",
     "touchend",
   ];
+  const TYPOGRAPHY_PROPERTIES = [
+    "font-family",
+    "font-size",
+    "font-weight",
+    "font-style",
+    "line-height",
+    "letter-spacing",
+    "word-spacing",
+    "text-transform",
+    "text-decoration",
+    "color",
+  ];
   let overlayHost = null;
   let overlay = null;
   let overlayLabel = null;
@@ -219,10 +231,20 @@
       return null;
     }
 
-    const rootTarget = document.elementsFromPoint(event.clientX, event.clientY)
-      .find((element) => !isInspectorElement(element)) ?? null;
+    const rootTarget = getInspectableElementFromStack(event.clientX, event.clientY);
 
     return getDeepestElementFromPoint(rootTarget, event.clientX, event.clientY);
+  }
+
+  function getInspectableElementFromStack(clientX, clientY) {
+    const elements = document.elementsFromPoint(clientX, clientY)
+      .filter((element) => !isInspectorElement(element));
+
+    return elements.find((element) => {
+      const candidate = getDeepestTextElementAtPoint(element, clientX, clientY);
+
+      return candidate?.textContent?.trim();
+    }) ?? elements[0] ?? null;
   }
 
   function getComposedPathElement(event) {
@@ -281,9 +303,11 @@
       renderedFontFamily,
       fontFamily: styles.fontFamily,
       fontSize: styles.fontSize,
+      declaredFontSizeRule: getDeclaredPropertyRule(element, "font-size", styles.fontSize),
       fontWeight: styles.fontWeight,
       fontStyle: styles.fontStyle,
       lineHeight: styles.lineHeight,
+      declaredLineHeightRule: getDeclaredPropertyRule(element, "line-height", styles.lineHeight),
       letterSpacing: styles.letterSpacing,
       wordSpacing: styles.wordSpacing,
       textTransform: styles.textTransform,
@@ -396,10 +420,11 @@
 
   function getTopSpecificitySelector(element) {
     const matches = getMatchingStyleRules(element)
+      .filter((match) => hasTypographyDeclaration(match.rule.style))
       .sort(compareRuleMatch)
       .reverse();
 
-    return matches[0]?.selectorText ?? "inline/computed style";
+    return matches[0]?.selectorText ?? getPropertySelector(element, "font-family");
   }
 
   function getPropertySelector(element, propertyName) {
@@ -413,6 +438,26 @@
       .reverse();
 
     return matches[0]?.selectorText ?? "inherited/computed style";
+  }
+
+  function getDeclaredPropertyRule(element, propertyName, fallbackValue) {
+    const inlineValue = element.style.getPropertyValue(propertyName);
+
+    if (inlineValue) {
+      return `${propertyName}: ${inlineValue};`;
+    }
+
+    const matches = getMatchingStyleRules(element)
+      .filter((match) => match.rule.style.getPropertyValue(propertyName))
+      .sort(compareRuleMatch)
+      .reverse();
+    const declaredValue = matches[0]?.rule.style.getPropertyValue(propertyName) || fallbackValue;
+
+    return declaredValue ? `${propertyName}: ${declaredValue};` : "";
+  }
+
+  function hasTypographyDeclaration(style) {
+    return TYPOGRAPHY_PROPERTIES.some((propertyName) => style.getPropertyValue(propertyName));
   }
 
   function getMatchingStyleRules(element) {

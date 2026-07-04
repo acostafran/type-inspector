@@ -18,6 +18,7 @@ const FIELD_NAMES = [
   "tagName",
   "element",
 ];
+const DECLARED_RULE_NAMES = ["declaredFontSizeRule", "declaredLineHeightRule"];
 const CSS_PROPERTY_BY_FIELD = {
   renderedFontFamily: "font-family",
   fontFamily: "font-family",
@@ -53,6 +54,9 @@ const fieldOutputs = new Map(
 const ruleOutputs = new Map(
   Array.from(document.querySelectorAll("[data-rule-field]"), (element) => [element.dataset.ruleField, element]),
 );
+const declaredRuleOutputs = new Map(
+  Array.from(document.querySelectorAll("[data-declared-rule-field]"), (element) => [element.dataset.declaredRuleField, element]),
+);
 const summaryLists = new Map(
   Array.from(document.querySelectorAll("[data-summary-list]"), (element) => [element.dataset.summaryList, element]),
 );
@@ -76,6 +80,12 @@ for (const [fieldName, button] of fieldOutputs) {
 for (const [fieldName, button] of ruleOutputs) {
   button.addEventListener("click", () => {
     void copyRule(fieldName);
+  });
+}
+
+for (const [fieldName, button] of declaredRuleOutputs) {
+  button.addEventListener("click", () => {
+    void copyDeclaredRule(fieldName);
   });
 }
 
@@ -163,6 +173,20 @@ async function copyRule(fieldName) {
   }
 }
 
+async function copyDeclaredRule(fieldName) {
+  if (!latestCapture || typeof latestCapture[fieldName] !== "string" || !latestCapture[fieldName]) {
+    return;
+  }
+
+  try {
+    await navigator.clipboard.writeText(latestCapture[fieldName]);
+    setStatus(`${getFieldLabel(fieldName)} copied.`);
+  } catch (error) {
+    console.warn("Could not copy declared CSS rule.", error);
+    setStatus("Could not copy that declared rule.");
+  }
+}
+
 function renderCapture(capture) {
   if (!isCapture(capture)) {
     latestCapture = null;
@@ -175,6 +199,10 @@ function renderCapture(capture) {
       button.removeAttribute("title");
     }
     for (const button of ruleOutputs.values()) {
+      button.disabled = true;
+      button.removeAttribute("title");
+    }
+    for (const button of declaredRuleOutputs.values()) {
       button.disabled = true;
       button.removeAttribute("title");
     }
@@ -200,6 +228,16 @@ function renderCapture(capture) {
       const rule = getCssRule(fieldName, capture);
       ruleOutput.disabled = !rule;
       ruleOutput.title = rule ? `Copy ${rule}` : "No CSS rule available";
+    }
+  }
+
+  for (const fieldName of DECLARED_RULE_NAMES) {
+    const output = declaredRuleOutputs.get(fieldName);
+    const value = capture[fieldName];
+
+    if (output) {
+      output.disabled = !value;
+      output.title = value ? `Copy ${value}` : "No declared rule available";
     }
   }
 
@@ -251,9 +289,11 @@ function formatCapture(capture) {
     `Rendered font: ${capture.renderedFontFamily || "--"}`,
     `Font origin: ${capture.fontOrigin || "--"}`,
     `Size: ${capture.fontSize || "--"}`,
+    `Declared size rule: ${capture.declaredFontSizeRule || "--"}`,
     `Weight: ${capture.fontWeight || "--"}`,
     `Style: ${capture.fontStyle || "--"}`,
     `Line height: ${capture.lineHeight || "--"}`,
+    `Declared line-height rule: ${capture.declaredLineHeightRule || "--"}`,
     `Letter spacing: ${capture.letterSpacing || "--"}`,
     `Word spacing: ${capture.wordSpacing || "--"}`,
     `Text transform: ${capture.textTransform || "--"}`,
@@ -315,6 +355,7 @@ function isCapture(value) {
   return value !== null
     && typeof value === "object"
     && FIELD_NAMES.every((fieldName) => typeof value[fieldName] === "string")
+    && DECLARED_RULE_NAMES.every((fieldName) => typeof value[fieldName] === "string")
     && isPageSummary(value.pageSummary);
 }
 
