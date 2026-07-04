@@ -169,7 +169,7 @@
   }
 
   function getInspectableElement(event) {
-    const textNodeElement = getTextNodeElementFromPoint(event);
+    const textNodeElement = getTextNodeElementFromPoint(event) ?? getTextNodeElementThroughOverlays(event);
 
     if (textNodeElement) {
       return textNodeElement;
@@ -247,6 +247,41 @@
     }) ?? elements[0] ?? null;
   }
 
+  function getTextNodeElementThroughOverlays(event) {
+    const hiddenElements = [];
+    const elements = document.elementsFromPoint(event.clientX, event.clientY)
+      .filter((element) => !isInspectorElement(element) && isPotentialOverlayElement(element));
+
+    try {
+      for (const element of elements.slice(0, 4)) {
+        hiddenElements.push([element, element.style.pointerEvents]);
+        element.style.pointerEvents = "none";
+
+        const textNodeElement = getTextNodeElementFromPoint(event);
+
+        if (textNodeElement) {
+          return textNodeElement;
+        }
+      }
+
+      return null;
+    } finally {
+      for (const [element, pointerEvents] of hiddenElements) {
+        element.style.pointerEvents = pointerEvents;
+      }
+    }
+  }
+
+  function isPotentialOverlayElement(element) {
+    const styles = window.getComputedStyle(element);
+    const rect = element.getBoundingClientRect();
+
+    return rect.width > 0
+      && rect.height > 0
+      && styles.position !== "static"
+      && (element.tagName === "A" || element.getAttribute("role") === "link" || Number.parseInt(styles.zIndex, 10) > 0);
+  }
+
   function getComposedPathElement(event) {
     return event.composedPath?.().find((entry) => entry instanceof Element && !isInspectorElement(entry)) ?? null;
   }
@@ -303,11 +338,11 @@
       renderedFontFamily,
       fontFamily: styles.fontFamily,
       fontSize: styles.fontSize,
-      declaredFontSizeRule: getDeclaredPropertyRule(element, "font-size", styles.fontSize),
+      declaredFontSizeRule: getDeclaredNumericPropertyRule(element, "font-size", styles.fontSize),
       fontWeight: styles.fontWeight,
       fontStyle: styles.fontStyle,
       lineHeight: styles.lineHeight,
-      declaredLineHeightRule: getDeclaredPropertyRule(element, "line-height", styles.lineHeight),
+      declaredLineHeightRule: getDeclaredNumericPropertyRule(element, "line-height", styles.lineHeight),
       letterSpacing: styles.letterSpacing,
       wordSpacing: styles.wordSpacing,
       textTransform: styles.textTransform,
@@ -440,10 +475,10 @@
     return matches[0]?.selectorText ?? "inherited/computed style";
   }
 
-  function getDeclaredPropertyRule(element, propertyName, fallbackValue) {
+  function getDeclaredNumericPropertyRule(element, propertyName, fallbackValue) {
     const inlineValue = element.style.getPropertyValue(propertyName);
 
-    if (inlineValue) {
+    if (isNumericCssValue(inlineValue)) {
       return `${propertyName}: ${inlineValue};`;
     }
 
@@ -451,9 +486,15 @@
       .filter((match) => match.rule.style.getPropertyValue(propertyName))
       .sort(compareRuleMatch)
       .reverse();
-    const declaredValue = matches[0]?.rule.style.getPropertyValue(propertyName) || fallbackValue;
+    const declaredValue = matches
+      .map((match) => match.rule.style.getPropertyValue(propertyName))
+      .find(isNumericCssValue) || (isNumericCssValue(fallbackValue) ? fallbackValue : "");
 
     return declaredValue ? `${propertyName}: ${declaredValue};` : "";
+  }
+
+  function isNumericCssValue(value) {
+    return typeof value === "string" && /^-?(?:\d+|\d*\.\d+)(?:[a-z%]+)?$/i.test(value.trim());
   }
 
   function hasTypographyDeclaration(style) {
@@ -581,8 +622,10 @@
       return "system font";
     }
 
-    if (isDeclaredFontFace(renderedFontFamily)) {
-      return "web font";
+    const fontFaceSource = getFontFaceSource(renderedFontFamily);
+
+    if (fontFaceSource) {
+      return describeFontFaceSource(fontFaceSource);
     }
 
     const firstFamily = families[0]?.toLowerCase();
@@ -594,9 +637,9 @@
     return "local or browser font";
   }
 
-  function isDeclaredFontFace(fontFamily) {
+  function getFontFaceSource(fontFamily) {
     if (typeof CSSFontFaceRule === "undefined") {
-      return false;
+      return "";
     }
 
     const target = fontFamily.toLowerCase();
@@ -615,13 +658,49 @@
           const declaredFamily = rule.style.getPropertyValue("font-family").replace(/^['\"]|['\"]$/g, "").toLowerCase();
 
           if (declaredFamily === target) {
-            return true;
+            return rule.style.getPropertyValue("src") || "declared @font-face";
           }
         }
       }
     }
 
-    return false;
+    return "";
+  }
+
+  function describeFontFaceSource(source) {
+    const lowerSource = source.toLowerCase();
+
+    if (lowerSource.includes("fonts.gstatic.com") || lowerSource.includes("fonts.googleapis.com")) {
+      return "Google Fonts web font";
+    }
+
+    if (lowerSource.includes("use.typekit.net") || lowerSource.includes("p.typekit.net")) {
+      return "Adobe Fonts web font";
+    }
+
+    if (/local\(/i.test(source) && !/url\(/i.test(source)) {
+      return "local installed font";
+    }
+
+    const urls = Array.from(source.matchAll(/url\(["']?([^"')]+)["']?\)/gi), (match) => match[1]);
+
+    if (!urls.length) {
+      return "declared web font";
+    }
+
+    if (urls.some((url) => isSameOriginUrl(url))) {
+      return "same-site server font";
+    }
+
+    return "external web font";
+  }
+
+  function isSameOriginUrl(url) {
+    try {
+      return new URL(url, window.location.href).origin === window.location.origin;
+    } catch {
+      return false;
+    }
   }
 
   function describeElement(element) {
