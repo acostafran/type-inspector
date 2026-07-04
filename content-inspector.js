@@ -64,6 +64,9 @@
   let overlayUnavailable = null;
   let active = false;
   let frozen = false;
+  let restingMode = false;
+  let restingCandidates = [];
+  let restingIndex = 0;
   let highlightedElement = null;
 
   chrome.runtime.onMessage.addListener((message) => {
@@ -82,6 +85,9 @@
 
     active = true;
     frozen = false;
+    restingMode = false;
+    restingCandidates = [];
+    restingIndex = 0;
     ensureOverlay();
     updateModeHint();
     document.addEventListener("mousemove", handleMouseMove, EVENT_OPTIONS);
@@ -100,6 +106,9 @@
 
     active = false;
     frozen = false;
+    restingMode = false;
+    restingCandidates = [];
+    restingIndex = 0;
     highlightedElement = null;
     document.removeEventListener("mousemove", handleMouseMove, EVENT_OPTIONS);
     document.removeEventListener("pointermove", handleMouseMove, EVENT_OPTIONS);
@@ -119,7 +128,7 @@
   }
 
   function handleMouseMove(event) {
-    if (frozen) {
+    if (frozen || restingMode) {
       return;
     }
 
@@ -150,7 +159,7 @@
       return;
     }
 
-    const candidate = getInspectableElement(event);
+    const candidate = restingMode ? highlightedElement : getInspectableElement(event);
 
     if (candidate) {
       chrome.runtime.sendMessage({
@@ -178,6 +187,46 @@
       return;
     }
 
+    if (event.key.toLowerCase() === "r") {
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      setRestingMode(!restingMode);
+      return;
+    }
+
+    if (restingMode && (event.key === "ArrowRight" || event.key === "ArrowDown" || event.key === "Tab")) {
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      moveRestingCandidate(1);
+      return;
+    }
+
+    if (restingMode && (event.key === "ArrowLeft" || event.key === "ArrowUp")) {
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      moveRestingCandidate(-1);
+      return;
+    }
+
+    if (restingMode && event.key === "Enter") {
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+
+      if (highlightedElement) {
+        chrome.runtime.sendMessage({
+          type: "type-inspector:capture",
+          payload: captureTypography(highlightedElement),
+        });
+        stopInspection();
+      }
+
+      return;
+    }
+
     if (event.key.toLowerCase() === "f") {
       event.preventDefault();
       event.stopPropagation();
@@ -187,11 +236,68 @@
   }
 
   function setFrozen(nextFrozen) {
+    if (restingMode) {
+      setRestingMode(false);
+    }
+
     frozen = nextFrozen;
     highlightedElement = null;
 
     hideOverlay();
     updateModeHint();
+  }
+
+  function setRestingMode(nextRestingMode) {
+    restingMode = nextRestingMode;
+    frozen = false;
+    highlightedElement = null;
+    restingCandidates = [];
+    restingIndex = 0;
+
+    if (!restingMode) {
+      hideOverlay();
+      updateModeHint();
+      return;
+    }
+
+    restingCandidates = getVisibleTextElements()
+      .filter((element) => isSelectableRestingCandidate(element))
+      .sort(compareElementsByPosition);
+
+    if (restingCandidates.length) {
+      updateRestingCandidate(0);
+    } else {
+      hideOverlay();
+    }
+
+    updateModeHint();
+  }
+
+  function moveRestingCandidate(delta) {
+    if (!restingCandidates.length) {
+      return;
+    }
+
+    updateRestingCandidate((restingIndex + delta + restingCandidates.length) % restingCandidates.length);
+  }
+
+  function updateRestingCandidate(index) {
+    restingIndex = index;
+    highlightedElement = restingCandidates[restingIndex];
+    updateOverlay(highlightedElement);
+  }
+
+  function isSelectableRestingCandidate(element) {
+    const rect = element.getBoundingClientRect();
+
+    return rect.width >= 2 && rect.height >= 2 && element.textContent?.trim();
+  }
+
+  function compareElementsByPosition(a, b) {
+    const aRect = a.getBoundingClientRect();
+    const bRect = b.getBoundingClientRect();
+
+    return aRect.top - bRect.top || aRect.left - bRect.left;
   }
 
   function getInspectableElement(event) {
@@ -880,8 +986,10 @@
 
     overlayHint.textContent = frozen
       ? "Type Inspector: menu freeze on. Move into the open submenu and click text. F unfreezes. Esc cancels."
-      : "Type Inspector: hover works normally. Open a submenu, press F to freeze it, then click text. Esc cancels.";
-    overlayHint.dataset.mode = frozen ? "frozen" : "active";
+      : restingMode
+        ? "Type Inspector: resting mode. Use arrows to choose text, Enter captures. R exits. Esc cancels."
+        : "Type Inspector: hover normally. R for resting styles. F freezes open menus. Esc cancels.";
+    overlayHint.dataset.mode = frozen ? "frozen" : restingMode ? "resting" : "active";
   }
 
   function updateUnavailableOverlay(event, message) {
@@ -954,6 +1062,11 @@
       .hint[data-mode="frozen"] {
         border-color: rgb(251 191 36 / 0.7);
         color: #fde68a;
+      }
+
+      .hint[data-mode="resting"] {
+        border-color: rgb(191 219 254 / 0.8);
+        color: #bfdbfe;
       }
 
       #${OVERLAY_ID} {

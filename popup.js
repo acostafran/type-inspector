@@ -138,11 +138,11 @@ async function copyLatestCapture() {
   }
 
   try {
-    await navigator.clipboard.writeText(formatCapture(latestCapture));
-    setStatus("Typography summary copied.");
+    await navigator.clipboard.writeText(formatCssDeclarationBlock(latestCapture));
+    setStatus("Typography CSS copied.");
   } catch (error) {
-    console.warn("Could not copy typography summary.", error);
-    setStatus("Could not copy typography summary.");
+    console.warn("Could not copy typography CSS.", error);
+    setStatus("Could not copy typography CSS.");
   }
 }
 
@@ -328,6 +328,23 @@ function formatCapture(capture) {
   ].join("\n");
 }
 
+function formatCssDeclarationBlock(capture) {
+  return [
+    ["font-size", capture.fontSize],
+    ["line-height", capture.lineHeight],
+    ["font-weight", capture.fontWeight],
+    ["font-style", capture.fontStyle],
+    ["letter-spacing", capture.letterSpacing],
+    ["word-spacing", capture.wordSpacing],
+    ["text-transform", capture.textTransform],
+    ["text-decoration", capture.textDecoration],
+    ["color", formatColorForCss(capture.color)],
+  ]
+    .filter(([, value]) => typeof value === "string" && value && value !== "--")
+    .map(([property, value]) => `${property}: ${value};`)
+    .join("\n");
+}
+
 function renderFieldValue(output, fieldName, value) {
   output.replaceChildren();
 
@@ -398,6 +415,16 @@ function parseRgbColor(value) {
   }
 
   return parts.slice(0, 3).map((part) => Math.min(Math.max(part, 0), 255));
+}
+
+function formatColorForCss(value) {
+  const rgb = parseRgbColor(value);
+
+  if (!rgb) {
+    return value;
+  }
+
+  return `#${rgb.map((channel) => channel.toString(16).padStart(2, "0")).join("")}`;
 }
 
 function getContrastRatio(foreground, background) {
