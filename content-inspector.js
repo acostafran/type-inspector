@@ -169,7 +169,9 @@
   }
 
   function getInspectableElement(event) {
-    const textNodeElement = getTextNodeElementFromPoint(event) ?? getTextNodeElementThroughOverlays(event);
+    const textNodeElement = getTextNodeElementFromPoint(event)
+      ?? getTextNodeElementThroughOverlays(event)
+      ?? getTextElementFromRanges(event.clientX, event.clientY);
 
     if (textNodeElement) {
       return textNodeElement;
@@ -272,6 +274,48 @@
     }
   }
 
+  function getTextElementFromRanges(clientX, clientY) {
+    const candidates = Array.from(document.querySelectorAll(TEXT_ELEMENT_SELECTOR))
+      .filter((element) => element.textContent?.trim() && isVisibleElement(element) && containsPoint(element, clientX, clientY))
+      .sort((a, b) => getElementArea(a) - getElementArea(b));
+
+    for (const element of candidates) {
+      if (hasTextRangeAtPoint(element, clientX, clientY)) {
+        return element;
+      }
+    }
+
+    return null;
+  }
+
+  function hasTextRangeAtPoint(element, clientX, clientY) {
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, {
+      acceptNode(node) {
+        return node.textContent?.trim() ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+      },
+    });
+    const range = document.createRange();
+
+    try {
+      while (walker.nextNode()) {
+        const node = walker.currentNode;
+
+        for (let index = 0; index < node.textContent.length; index += 1) {
+          range.setStart(node, index);
+          range.setEnd(node, index + 1);
+
+          if (Array.from(range.getClientRects()).some((rect) => pointInRect(clientX, clientY, rect))) {
+            return true;
+          }
+        }
+      }
+
+      return false;
+    } finally {
+      range.detach();
+    }
+  }
+
   function isPotentialOverlayElement(element) {
     const styles = window.getComputedStyle(element);
     const rect = element.getBoundingClientRect();
@@ -316,11 +360,21 @@
 
   function containsPoint(element, clientX, clientY) {
     return Array.from(element.getClientRects()).some((rect) => (
-      clientX >= rect.left
+      pointInRect(clientX, clientY, rect)
+    ));
+  }
+
+  function pointInRect(clientX, clientY, rect) {
+    return clientX >= rect.left
       && clientX <= rect.right
       && clientY >= rect.top
-      && clientY <= rect.bottom
-    ));
+      && clientY <= rect.bottom;
+  }
+
+  function getElementArea(element) {
+    const rect = element.getBoundingClientRect();
+
+    return rect.width * rect.height;
   }
 
   function isEmbeddedContentTarget(event) {
@@ -628,6 +682,18 @@
       return describeFontFaceSource(fontFaceSource);
     }
 
+    const stylesheetSource = getStylesheetFontSource(renderedFontFamily);
+
+    if (stylesheetSource) {
+      return stylesheetSource;
+    }
+
+    const documentFontSource = getDocumentFontSource(renderedFontFamily);
+
+    if (documentFontSource) {
+      return documentFontSource;
+    }
+
     const firstFamily = families[0]?.toLowerCase();
 
     if (firstFamily && firstFamily !== normalizedRendered) {
@@ -635,6 +701,44 @@
     }
 
     return "local or browser font";
+  }
+
+  function getDocumentFontSource(fontFamily) {
+    const target = fontFamily.toLowerCase();
+
+    try {
+      for (const fontFace of Array.from(document.fonts ?? [])) {
+        const family = fontFace.family?.replace(/^['\"]|['\"]$/g, "").toLowerCase();
+
+        if (family === target) {
+          return fontFace.status ? `FontFace API (${fontFace.status})` : "FontFace API";
+        }
+      }
+    } catch {
+      return "";
+    }
+
+    return "";
+  }
+
+  function getStylesheetFontSource(fontFamily) {
+    const lowerFamily = fontFamily.toLowerCase();
+    const stylesheetHrefs = Array.from(document.querySelectorAll('link[rel~="stylesheet"][href]'), (link) => link.href.toLowerCase());
+    const styleText = Array.from(document.querySelectorAll("style"), (style) => style.textContent?.toLowerCase() ?? "").join("\n");
+
+    if (stylesheetHrefs.some((href) => href.includes("fonts.googleapis.com")) || styleText.includes("fonts.googleapis.com")) {
+      return "Google Fonts stylesheet";
+    }
+
+    if (stylesheetHrefs.some((href) => href.includes("use.typekit.net") || href.includes("p.typekit.net")) || styleText.includes("use.typekit.net")) {
+      return "Adobe Fonts stylesheet";
+    }
+
+    if (stylesheetHrefs.some((href) => href.includes(lowerFamily.replace(/\s+/g, "")) || href.includes(lowerFamily.replace(/\s+/g, "-")))) {
+      return "external or same-site stylesheet font";
+    }
+
+    return "";
   }
 
   function getFontFaceSource(fontFamily) {
